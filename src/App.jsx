@@ -1,7 +1,7 @@
 import React from "react";
 import { Routes, Route } from "react-router-dom";
-import Home from "@/components/home/Home";
-import Client from "@/components/client/Client";
+import Home from "@/components/home/Home.jsx";
+import Client from "@/components/client/Client.jsx";
 import { ThemeProvider } from "./components/theme-provider";
 import Navbar from "./components/Navbar";
 

@@ -22,13 +22,33 @@ const features = [
     description:
       "Generate signed agreements, deliverables checklists, and final payment reminders automatically.",
   },
+  {
+    title: "Curated Talent Pools",
+    description:
+      "Bookmark, tag, and compare the freelancers you love. Keep shortlists organized for every project.",
+  },
+  {
+    title: "Brief Broadcasts",
+    description:
+      "Send project briefs to selected talent with one click and track who responds in real time.",
+  },
+  {
+    title: "Collaboration Notes",
+    description:
+      "Log interviews, rate candidates, and share thoughts with stakeholders directly inside Markify.",
+  },
+  {
+    title: "Secure Handoffs",
+    description:
+      "Generate signed agreements, deliverables checklists, and final payment reminders automatically.",
+  },
 ];
 
 const ClientOnboading = () => {
   return (
     <section className="text-white space-y-6">
       <div className="text-center space-y-2">
-        <p className="text-xs uppercase tracking-[0.4em] text-yellow-300">
+        <p className="text-lg uppercase tracking-[0.4em] text-yellow-300">
           Services
         </p>
         <h2 className="text-3xl font-semibold">

@@ -4,14 +4,17 @@ import Home from "@/components/home/Home.jsx";
 import Client from "@/components/client/Client.jsx";
 import { ThemeProvider } from "./components/theme-provider";
 import Navbar from "./components/Navbar";
+import SignupPage from "./components/forms/Signup";
 
 const App = () => {
   return (
     <main>
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+        <Navbar />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/client" element={<Client />} />
+          <Route path="/signup" element={<SignupPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </ThemeProvider>

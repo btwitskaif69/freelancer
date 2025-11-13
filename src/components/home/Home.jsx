@@ -5,7 +5,6 @@ import Navbar from "../Navbar";
 const Home = () => {
   return (
     <main>
-      <Navbar />
       <Onboading />
     </main>
   );

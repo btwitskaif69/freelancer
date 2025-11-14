@@ -115,7 +115,7 @@ const dashboardTemplates = {
   }
 };
 
-const DashboardContent = ({ roleOverride }) => {
+export const DashboardContent = ({ roleOverride }) => {
   const { state, toggleSidebar } = useSidebar();
   const [sessionUser, setSessionUser] = useState(null);
 

@@ -80,7 +80,7 @@ const Onboading = () => {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 mt-2 w-full sm:w-auto">
-          <Link to="/client" className="w-full sm:w-auto">
+          <Link to="/service" className="w-full sm:w-auto">
             <Button
               size="lg"
               className="text-lg gap-2 rounded-full shadow-md w-full sm:w-auto cursor-pointer">

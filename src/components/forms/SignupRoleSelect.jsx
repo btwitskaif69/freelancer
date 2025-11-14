@@ -76,13 +76,6 @@ export function SignupRoleSelect({ onContinue }) {
                     </p>
                   </div>
                 </div>
-                <span
-                  aria-label={isActive ? "Selected role" : "Not selected"}
-                  className={cn(
-                    "size-4 rounded-full border-2",
-                    isActive ? "border-primary bg-primary" : "border-muted"
-                  )}
-                />
               </div>
             </Card>
           );

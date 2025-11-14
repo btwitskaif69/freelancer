@@ -9,6 +9,8 @@ import { apiRouter } from "./routes/index.js";
 import { prisma } from "./lib/prisma.js";
 
 const runningInVercel = process.env.VERCEL === "1";
+const normalizeOrigin = (origin) =>
+  typeof origin === "string" ? origin.replace(/\/+$/, "") : origin;
 
 export const createApp = () => {
   const app = express();

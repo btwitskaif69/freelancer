@@ -2,20 +2,14 @@
 
 import * as React from "react"
 import {
-  AudioWaveform,
-  BookOpen,
-  Bot,
-  Command,
-  Frame,
-  GalleryVerticalEnd,
-  Map,
-  PieChart,
-  Settings2,
-  SquareTerminal,
+  CreditCard,
+  FileText,
+  LayoutDashboard,
+  MessageSquare,
+  Users
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
-import { NavProjects } from "@/components/nav-projects"
 import { NavUser } from "@/components/nav-user"
 import { TeamSwitcher } from "@/components/team-switcher"
 import {
@@ -25,151 +19,136 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { getSession } from "@/lib/auth-storage"
 
 // This is sample data.
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
+const fallbackUser = {
+  name: "shadcn",
+  email: "m@example.com",
+  avatar: "/avatars/shadcn.jpg"
+};
+
+const brandPresets = {
+  FREELANCER: {
+    name: "Freelancer HQ",
+    plan: "Creator workspace",
+    logoText: "FR"
   },
-  teams: [
+  CLIENT: {
+    name: "Client Portal",
+    plan: "Client workspace",
+    logoText: "CL"
+  }
+};
+
+const navConfigs = {
+  FREELANCER: [
     {
-      name: "Acme Inc",
-      logo: GalleryVerticalEnd,
-      plan: "Enterprise",
+      title: "Dashboard",
+      url: "/freelancer",
+      icon: LayoutDashboard,
+      isActive: true
     },
     {
-      name: "Acme Corp.",
-      logo: AudioWaveform,
-      plan: "Startup",
+      title: "Proposals",
+      url: "/freelancer/proposals",
+      icon: FileText,
+      items: [
+        { title: "Drafts", url: "/freelancer/proposals/drafts" },
+        { title: "Received", url: "/freelancer/proposals/received" },
+        { title: "Accepted", url: "/freelancer/proposals/accepted" }
+      ]
     },
     {
-      name: "Evil Corp.",
-      logo: Command,
-      plan: "Free",
+      title: "Messages",
+      url: "/freelancer/messages",
+      icon: MessageSquare,
+      items: [
+        { title: "Inbox", url: "/freelancer/messages/inbox" },
+        { title: "Archive", url: "/freelancer/messages/archive" },
+        { title: "Templates", url: "/freelancer/messages/templates" }
+      ]
     },
+    {
+      title: "Payments",
+      url: "/freelancer/payments",
+      icon: CreditCard,
+      items: [
+        { title: "Invoices", url: "/freelancer/payments/invoices" },
+        { title: "Payouts", url: "/freelancer/payments/payouts" },
+        { title: "Taxes", url: "/freelancer/payments/taxes" }
+      ]
+    }
   ],
-  navMain: [
+  CLIENT: [
     {
-      title: "Playground",
-      url: "#",
-      icon: SquareTerminal,
-      isActive: true,
+      title: "Dashboard",
+      url: "/client",
+      icon: LayoutDashboard,
+      isActive: true
+    },
+    {
+      title: "Briefs",
+      url: "/client/briefs",
+      icon: FileText,
       items: [
-        {
-          title: "History",
-          url: "#",
-        },
-        {
-          title: "Starred",
-          url: "#",
-        },
-        {
-          title: "Settings",
-          url: "#",
-        },
-      ],
+        { title: "Drafts", url: "/client/briefs/drafts" },
+        { title: "Published", url: "/client/briefs/published" },
+        { title: "Awarded", url: "/client/briefs/awarded" }
+      ]
     },
     {
-      title: "Models",
-      url: "#",
-      icon: Bot,
+      title: "Vendors",
+      url: "/client/vendors",
+      icon: Users,
       items: [
-        {
-          title: "Genesis",
-          url: "#",
-        },
-        {
-          title: "Explorer",
-          url: "#",
-        },
-        {
-          title: "Quantum",
-          url: "#",
-        },
-      ],
+        { title: "Shortlist", url: "/client/vendors/shortlist" },
+        { title: "Contracts", url: "/client/vendors/contracts" },
+        { title: "Reviews", url: "/client/vendors/reviews" }
+      ]
     },
     {
-      title: "Documentation",
-      url: "#",
-      icon: BookOpen,
+      title: "Messages",
+      url: "/client/messages",
+      icon: MessageSquare,
       items: [
-        {
-          title: "Introduction",
-          url: "#",
-        },
-        {
-          title: "Get Started",
-          url: "#",
-        },
-        {
-          title: "Tutorials",
-          url: "#",
-        },
-        {
-          title: "Changelog",
-          url: "#",
-        },
-      ],
+        { title: "Inbox", url: "/client/messages/inbox" },
+        { title: "Archive", url: "/client/messages/archive" },
+        { title: "Approvals", url: "/client/messages/approvals" }
+      ]
     },
     {
-      title: "Settings",
-      url: "#",
-      icon: Settings2,
+      title: "Payments",
+      url: "/client/payments",
+      icon: CreditCard,
       items: [
-        {
-          title: "General",
-          url: "#",
-        },
-        {
-          title: "Team",
-          url: "#",
-        },
-        {
-          title: "Billing",
-          url: "#",
-        },
-        {
-          title: "Limits",
-          url: "#",
-        },
-      ],
-    },
-  ],
-  projects: [
-    {
-      name: "Design Engineering",
-      url: "#",
-      icon: Frame,
-    },
-    {
-      name: "Sales & Marketing",
-      url: "#",
-      icon: PieChart,
-    },
-    {
-      name: "Travel",
-      url: "#",
-      icon: Map,
-    },
-  ],
-}
+        { title: "Invoices", url: "/client/payments/invoices" },
+        { title: "Disbursements", url: "/client/payments/disbursements" },
+        { title: "Reports", url: "/client/payments/reports" }
+      ]
+    }
+  ]
+};
 
 export function AppSidebar({
   ...props
 }) {
+  const session = typeof window !== "undefined" ? getSession() : null;
+  const sessionUser = session?.user ?? null;
+  const role = sessionUser?.role ?? "FREELANCER";
+  const brand = brandPresets[role] ?? brandPresets.FREELANCER;
+  const navItems = navConfigs[role] ?? navConfigs.FREELANCER;
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
+        <TeamSwitcher brand={brand} />
       </SidebarHeader>
-      <SidebarContent>
-        <NavMain items={data.navMain} />
-        <NavProjects projects={data.projects} />
+      <SidebarContent className="!overflow-hidden">
+        <NavMain items={navItems} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={sessionUser ?? fallbackUser} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

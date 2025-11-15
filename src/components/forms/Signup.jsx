@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
 import { toast } from "sonner";
@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { signup } from "@/lib/api-client";
-import { persistSession } from "@/lib/auth-storage";
+import { useAuth } from "@/context/AuthContext";
+import { FreelancerOnboarding } from "@/components/freelancer/Onboading";
 import { SignupRoleSelect } from "./SignupRoleSelect";
 
 const initialFormState = {
@@ -29,7 +30,26 @@ function Signup({ className, ...props }) {
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
+  const [showFreelancerOnboarding, setShowFreelancerOnboarding] = useState(false);
+  const [freelancerCategory, setFreelancerCategory] = useState(null);
   const navigate = useNavigate();
+  const { login: setAuthSession } = useAuth();
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined;
+    }
+
+    if (!showFreelancerOnboarding) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [showFreelancerOnboarding]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -61,7 +81,7 @@ function Signup({ className, ...props }) {
         password: formData.password,
         role: selectedRole
       });
-      persistSession(authPayload);
+      setAuthSession(authPayload?.user, authPayload?.accessToken);
       toast.success("Account created successfully.");
       setFormData(initialFormState);
       const nextRole = authPayload?.user?.role?.toUpperCase() || selectedRole;
@@ -76,9 +96,51 @@ function Signup({ className, ...props }) {
     }
   };
 
+  const handleRoleContinue = (role) => {
+    setSelectedRole(role);
+    setFormError("");
+    if (role === "FREELANCER") {
+      setShowFreelancerOnboarding(true);
+    } else {
+      setShowFreelancerOnboarding(false);
+      setFreelancerCategory(null);
+    }
+  };
+
+  const resetToRoleSelection = () => {
+    setSelectedRole(null);
+    setFreelancerCategory(null);
+    setShowFreelancerOnboarding(false);
+    setFormData(initialFormState);
+    setFormError("");
+  };
+
   const renderRoleStep = () => (
+    <div className="flex h-screen flex-col items-center justify-center p-4 md:p-10">
+      <SignupRoleSelect onContinue={handleRoleContinue} />
+    </div>
+  );
+
+  const renderFreelancerOnboarding = () => (
     <div className="bg-muted flex min-h-svh flex-col items-center justify-center p-6 md:p-10">
-      <SignupRoleSelect onContinue={setSelectedRole} />
+      <div className="w-full mt-10 max-w-5xl space-y-6">
+        <FreelancerOnboarding
+          initialCategory={freelancerCategory ?? ""}
+          onContinue={(category) => {
+            setFreelancerCategory(category);
+            setShowFreelancerOnboarding(false);
+          }}
+        />
+        <div className="text-center">
+          <button
+            type="button"
+            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+            onClick={resetToRoleSelection}
+          >
+            Change role
+          </button>
+        </div>
+      </div>
     </div>
   );
 
@@ -108,11 +170,7 @@ function Signup({ className, ...props }) {
                     <button
                       type="button"
                       className="underline underline-offset-4 text-primary"
-                      onClick={() => {
-                        setSelectedRole(null);
-                        setFormData(initialFormState);
-                        setFormError("");
-                      }}
+                      onClick={resetToRoleSelection}
                     >
                       Change role
                     </button>
@@ -235,6 +293,10 @@ function Signup({ className, ...props }) {
 
   if (!selectedRole) {
     return renderRoleStep();
+  }
+
+  if (selectedRole === "FREELANCER" && showFreelancerOnboarding) {
+    return renderFreelancerOnboarding();
   }
 
   return renderForm();

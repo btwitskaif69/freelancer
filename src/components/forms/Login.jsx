@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { login } from "@/lib/api-client";
-import { persistSession } from "@/lib/auth-storage";
+import { useAuth } from "@/context/AuthContext";
 
 const initialFormState = {
   email: "",
@@ -26,6 +26,7 @@ function Login({ className, ...props }) {
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
+  const { login: setAuthSession } = useAuth();
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -45,7 +46,7 @@ function Login({ className, ...props }) {
         email: formData.email.trim().toLowerCase(),
         password: formData.password
       });
-      persistSession(authPayload);
+      setAuthSession(authPayload?.user, authPayload?.accessToken);
       toast.success("Logged in successfully.");
       setFormData(initialFormState);
       const nextRole = authPayload?.user?.role?.toUpperCase();

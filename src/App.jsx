@@ -9,7 +9,7 @@ import SignupPage from "./components/forms/Signup";
 import LoginPage from "./components/forms/Login";
 import FreelancerDashboard from "@/components/freelancer/FreelancerDashboard";
 import { Toaster } from "@/components/ui/sonner";
-import { getSession } from "@/lib/auth-storage";
+import { useAuth } from "@/context/AuthContext";
 
 const App = () => {
   return (
@@ -17,7 +17,7 @@ const App = () => {
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
         <Routes>
           <Route path="/" element={<LayoutWithNavbar><Home /></LayoutWithNavbar>} />
-          <Route path="/signup" element={<LayoutWithNavbar><SignupPage /></LayoutWithNavbar>} />
+          <Route path="/signup" element={<SignupPage />} />
           <Route path="/login" element={<LayoutWithNavbar><LoginPage /></LayoutWithNavbar>} />
           <Route
             path="/client"
@@ -56,10 +56,20 @@ LayoutWithNavbar.propTypes = {
 };
 
 const ProtectedRoute = ({ children }) => {
-  const session = getSession();
-  if (!session) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <span className="loading loading-spinner text-primary" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
+
   return children;
 };
 

@@ -86,12 +86,14 @@ const Onboading = () => {
               Hiring <ArrowRight className="h-5 w-4" />
             </Button>
           </Link>
-          <Button
-            variant="outline"
-            size="lg"
-            className="text-lg rounded-full border-foreground/20 hover:bg-foreground/10 w-full sm:w-auto">
-            Earn Money
-          </Button>
+          <Link to="/freelancer/onboarding" className="w-full sm:w-auto">
+            <Button
+              variant="outline"
+              size="lg"
+              className="text-lg rounded-full border-foreground/20 hover:bg-foreground/10 w-full sm:w-auto cursor-pointer">
+              Earn Money
+            </Button>
+          </Link>
         </div>
       </section>
     </div>

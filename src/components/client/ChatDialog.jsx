@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Loader2, User, Bot } from "lucide-react";
+import { API_BASE_URL } from "@/lib/api-client";
 
 const ChatDialog = ({ isOpen, onClose, service }) => {
     const [messages, setMessages] = useState([]);
@@ -30,15 +31,16 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
     }, [isOpen, service]);
 
     const handleSend = async () => {
-        if (!input.trim()) return;
+        if (!input.trim() || !service?.title) return;
 
         const userMessage = { role: "user", content: input };
-        setMessages((prev) => [...prev, userMessage]);
+        const nextMessages = [...messages, userMessage];
+        setMessages(nextMessages);
         setInput("");
         setIsLoading(true);
 
         try {
-            const response = await fetch("http://localhost:5000/api/chat", {
+            const response = await fetch(`${API_BASE_URL}/api/chat`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -46,7 +48,7 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
                 body: JSON.stringify({
                     message: input,
                     service: service.title,
-                    history: messages,
+                    history: nextMessages,
                 }),
             });
 

@@ -1,8 +1,8 @@
 ﻿import OpenAI from "openai";
 import { env } from "../config/env.js";
 
-const MIN_WEBSITE_PRICE = 25000;
-const MIN_WEBSITE_PRICE_DISPLAY = "INR 25,000";
+const MIN_WEBSITE_PRICE = 120000;
+const MIN_WEBSITE_PRICE_DISPLAY = "INR 120,000";
 
 // Helper function to get service details
 const getServiceDetails = (service) => {
@@ -39,25 +39,26 @@ const getCounterQuestion = () => `Counter question (ask first):
 const devTechFlow = `Conversation format (Development & Tech):
 - Start with: "Hi! I'll help you create a proposal for your Development & Tech project. Let's start with a few questions."
 - Ask one question at a time in this order and keep answers short:
-  1) Hi there! What’s your first name?
-  2) What’s your company or project name?
+  1) Hi there! What's your first name?
+  2) What's your company or project name?
   3) Where are you based?
-  4) What type of development or tech service are you looking for? (use their choice if given)
+  4) What type of development or tech service are you looking for? (options: Website, Web App/SaaS, Mobile App, E-commerce, Other)
   5) Is this a new project or an existing one that needs updates?
-  6) Please describe your project or idea in a few sentences.
-  7) What are your main goals for this project?
-  8) Do you already have a design, wireframe, or concept ready?
-  9) Will you need ongoing maintenance or support after launch?
-  10) Do you have a preferred tech stack or platform?
-  11) Do you require any integrations?
-  12) Would you like us to handle the UI/UX design as part of the project?
-  13) What’s your estimated budget range for this project? (remind website floor if relevant)
-  14) What’s your desired project timeline?
-  15) Would you like SEO setup, analytics, or marketing tools included?
-  16) Do you want to include AI features, chatbots, or automation in your project?
-  17) Do you have any special request?
-  18) Provide links to previous projects, repos, or case studies (optional).
-- Be concise (1-2 sentences), respond fast, and move to the next question.`;
+  6) Describe the project briefly (what it does, who uses it, 2–3 sentences).
+  7) What are the must-have features or pages? (bullet list ok)
+  8) Do you already have a design, wireframe, or concept ready? (Yes/No/Partial)
+  9) Would you like us to handle the UI/UX design? (Yes/No/Partial)
+  10) Do you have a preferred tech stack or platform? (e.g., React, Next.js, Node, Laravel, WordPress, Other)
+  11) Do you require integrations? (payment, auth, CRM/API, analytics)
+  12) Will you need ongoing maintenance or support after launch?
+  13) What’s your estimated budget range? (remind the minimum ${MIN_WEBSITE_PRICE_DISPLAY})
+  14) What’s your desired project timeline? (options: 2–4 weeks, 1–2 months, 2–3 months, Flexible)
+  15) Any SEO/analytics or marketing tools needed? (Yes/No/Maybe later)
+  16) Any AI features, chatbots, or automation needed? (Yes/No/Interested)
+  17) Any special requests or constraints?
+  18) Provide links to previous projects, repos, or references (optional).
+- Be concise (1-2 sentences), respond fast, and move to the next question.
+- Do NOT stop; always ask the next question until all are answered or you deliver the proposal.`;
 
 // Proposal template to generate once the questionnaire is answered
 const proposalTemplate = `When you have enough answers, generate a proposal in this exact structure (replace unknowns with "Not provided"):
@@ -119,7 +120,7 @@ Proposal instructions:
 ${proposalTemplate}
 
 Your Goal:
-- Gather: 1) what they need, 2) timeline, 3) budget range
+- Gather: 1) what they need, 2) timeline, 3) budget range. Do NOT stop mid-flow; always ask the next required question.
 - If a website budget is under ${MIN_WEBSITE_PRICE_DISPLAY}, restate the minimum and suggest a smaller scope or phased plan.
 
 After 3-4 exchanges, provide:
@@ -176,7 +177,7 @@ export const chatController = async (req, res) => {
             completion = await openai.chat.completions.create({
                 model: env.OPENROUTER_MODEL,
                 messages: messages,
-                max_tokens: 120, // Keep responses short and concise
+                max_tokens: 180, // Slightly higher to avoid premature cut-offs
                 temperature: 0.2,
             });
         } catch (error) {
@@ -185,7 +186,7 @@ export const chatController = async (req, res) => {
                 completion = await openai.chat.completions.create({
                     model: env.OPENROUTER_MODEL_FALLBACK,
                     messages: messages,
-                    max_tokens: 120,
+                    max_tokens: 180,
                     temperature: 0.2,
                 });
             } else {

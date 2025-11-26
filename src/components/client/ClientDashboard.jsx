@@ -214,6 +214,17 @@ const ClientDashboardContent = () => {
     ? `${sessionUser.fullName.split(" ")[0]}'s control room`
     : `${roleLabel} control room`;
 
+  const cleanProposalContent = (content = "") => {
+    if (!content || typeof content !== "string") return "";
+    let cleaned = content;
+    cleaned = cleaned.replace(/\*\*PROJECT PROPOSAL\*\*/gi, "");
+    cleaned = cleaned.replace(/\*\*Project Title:\*\*.*(\r?\n)?/gi, "");
+    cleaned = cleaned.replace(/\*\*Prepared for:\*\*.*(\r?\n)?/gi, "");
+    cleaned = cleaned.replace(/^-+\s*Project Proposal\s*-+/gi, "");
+    cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+    return cleaned.trim();
+  };
+
   const savedProposalDetails = useMemo(() => {
     if (!savedProposal) {
       return null;
@@ -224,18 +235,28 @@ const ClientDashboardContent = () => {
         ? savedProposal
         : { content: savedProposal };
 
-    const projectTitle =
-      baseProposal.projectTitle ||
-      baseProposal.title ||
-      baseProposal.project ||
-      "Untitled project";
+      const service =
+        baseProposal.service ||
+        baseProposal.category ||
+        baseProposal.professionalField ||
+        baseProposal.serviceType ||
+        baseProposal.projectTitle ||
+        "General services";
 
-    const service =
-      baseProposal.service ||
-      baseProposal.category ||
-      baseProposal.professionalField ||
-      baseProposal.serviceType ||
-      "General services";
+      const projectTitle =
+        baseProposal.projectTitle ||
+        baseProposal.title ||
+        baseProposal.project ||
+        service ||
+        "Untitled project";
+
+      const projectSubtype =
+        baseProposal.projectSubtype ||
+        baseProposal.projectType ||
+        baseProposal.buildType ||
+        baseProposal.appType ||
+        baseProposal.siteType ||
+        null;
 
     const summary =
       baseProposal.summary ||
@@ -244,6 +265,7 @@ const ClientDashboardContent = () => {
       baseProposal.notes ||
       baseProposal.content ||
       "";
+    const cleanedSummary = cleanProposalContent(summary);
 
     const budgetValue =
       baseProposal.budget || baseProposal.budgetRange || baseProposal.estimate;
@@ -277,15 +299,16 @@ const ClientDashboardContent = () => {
       baseProposal.recipient ||
       "Freelancer";
 
-    return {
-      projectTitle,
-      service,
-      preparedFor,
-      summary,
-      budget:
-        typeof budgetValue === "number"
-          ? `$${budgetValue.toLocaleString()}`
-          : budgetValue,
+      return {
+        projectTitle,
+        service,
+        preparedFor,
+        summary: cleanedSummary,
+        projectSubtype,
+        budget:
+          typeof budgetValue === "number"
+            ? `$${budgetValue.toLocaleString()}`
+            : budgetValue,
       createdAtDisplay: createdAtDisplay ?? new Date().toLocaleString(),
       freelancerName,
       raw: baseProposal,
@@ -417,7 +440,12 @@ const ClientDashboardContent = () => {
                 <p className="text-sm font-semibold uppercase tracking-[0.4em] text-primary/70">
                   Project details
                 </p>
-                <div className="mt-4 rounded-2xl border border-primary/25 bg-black/60 p-5 font-mono text-sm text-primary/80">
+                <div
+                  className="mt-4 rounded-2xl border border-primary/25 bg-gradient-to-b from-[#0b0702] via-[#0a0805] to-[#050302] p-5 font-mono text-sm text-primary/80 shadow-[0_40px_120px_-80px_rgba(253,200,0,0.5)]"
+                  style={{
+                    backgroundImage:
+                      "radial-gradient(circle at 20% 20%, rgba(253,200,0,0.05), transparent 30%), radial-gradient(circle at 80% 0%, rgba(253,200,0,0.08), transparent 25%), linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(0,0,0,0.2))"
+                  }}>
                   <p className="text-[11px] uppercase tracking-[0.5em] text-primary/60">
                     --- Project Proposal ---
                   </p>
@@ -430,6 +458,11 @@ const ClientDashboardContent = () => {
                         <p className="text-lg font-semibold text-primary">
                           {savedProposalDetails.projectTitle}
                         </p>
+                        {savedProposalDetails.projectSubtype ? (
+                          <p className="text-xs uppercase tracking-[0.3em] text-primary/70">
+                            {savedProposalDetails.projectSubtype}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="grid gap-2 text-sm sm:grid-cols-2">
                         <div>
@@ -451,14 +484,16 @@ const ClientDashboardContent = () => {
                           </div>
                         ) : null}
                       </div>
-                      <div className="space-y-1 rounded-xl bg-black/50 p-4 text-sm leading-relaxed text-white/70 scrollbar-thin">
+                      <div className="space-y-2 rounded-xl bg-black/60 p-4 text-sm leading-relaxed text-white/80 border border-white/5">
                         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary/60">
-                          Executive summary
+                          Proposal body
                         </p>
-                        <p className="max-h-48 overflow-y-auto pr-2">
-                          {savedProposalDetails.summary ||
-                            "Proposal details recovered from your previous session."}
-                        </p>
+                        <div className="max-h-72 overflow-y-auto pr-2 scrollbar-thin">
+                          <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-white/80">
+                            {savedProposalDetails.summary ||
+                              "Proposal details recovered from your previous session."}
+                          </pre>
+                        </div>
                       </div>
                     </div>
                   ) : (

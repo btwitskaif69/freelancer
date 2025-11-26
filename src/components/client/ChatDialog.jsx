@@ -23,6 +23,7 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
   const [savedProposal, setSavedProposal] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState("");
+  const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const scrollRef = useRef(null);
@@ -157,6 +158,12 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
     }
   }, [messages, isLoading, latestProposalMessage]);
 
+  useEffect(() => {
+    if (latestProposalMessage?.content) {
+      setIsProposalModalOpen(true);
+    }
+  }, [latestProposalMessage]);
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px] h-[600px] flex flex-col overflow-hidden">
@@ -212,29 +219,6 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
                 </div>
               </div>
             )}
-            {latestProposalMessage && (
-              <div className="rounded-lg bg-slate-900 text-slate-50 p-4 shadow-sm space-y-3 border border-slate-800">
-                <div className="text-xs uppercase tracking-wide text-slate-300">
-                  Proposal Ready
-                </div>
-                <pre className="whitespace-pre-wrap text-sm leading-relaxed font-medium">
-                  {latestProposalMessage.content}
-                </pre>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="secondary" onClick={handleEditProposal}>
-                    Edit
-                  </Button>
-                  <Button size="sm" onClick={handleSaveProposal}>
-                    Save
-                  </Button>
-                </div>
-                {savedProposal && (
-                  <div className="text-xs text-slate-300">
-                    Saved for this session.
-                  </div>
-                )}
-              </div>
-            )}
             <div ref={scrollRef} />
           </div>
         </ScrollArea>
@@ -258,8 +242,30 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
           </form>
         </DialogFooter>
       </DialogContent>
+      <Dialog open={isProposalModalOpen} onOpenChange={setIsProposalModalOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Proposal ready</DialogTitle>
+            <DialogDescription>Review, edit, or save this proposal.</DialogDescription>
+          </DialogHeader>
+          <pre className="whitespace-pre-wrap rounded-md bg-slate-900 text-slate-50 p-4 text-sm leading-relaxed border border-slate-800 max-h-[360px] overflow-y-auto">
+            {latestProposalMessage?.content}
+          </pre>
+          <DialogFooter className="flex justify-between gap-2">
+            <div className="text-xs text-muted-foreground">
+              {savedProposal ? "Saved for this session." : null}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={handleEditProposal}>
+                Edit
+              </Button>
+              <Button onClick={handleSaveProposal}>Save</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={isEditing} onOpenChange={setIsEditing}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[460px]">
           <DialogHeader>
             <DialogTitle>Edit proposal</DialogTitle>
             <DialogDescription>Adjust the text before saving.</DialogDescription>
@@ -267,8 +273,8 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
           <Textarea
             value={editedText}
             onChange={(e) => setEditedText(e.target.value)}
-            rows={8}
-            className="w-full"
+            rows={7}
+            className="w-full text-sm leading-relaxed max-h-[320px] min-h-[160px]"
           />
           <DialogFooter className="justify-end gap-2">
             <Button variant="ghost" onClick={() => setIsEditing(false)}>

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { CheckCircle2, Clock, FileText, MoreVertical, XCircle } from "lucide-react";
 import { RoleAwareSidebar } from "@/components/dashboard/RoleAwareSidebar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +9,15 @@ import { Button } from "@/components/ui/button";
 import { FreelancerTopBar } from "@/components/freelancer/FreelancerTopBar";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const statusConfig = {
   pending: {
@@ -57,13 +65,32 @@ const normalizeProposalStatus = (status = "") => {
 };
 
 const mapApiProposal = (proposal = {}) => {
+  const clientName =
+    proposal.project?.owner?.fullName ||
+    proposal.project?.owner?.name ||
+    proposal.project?.owner?.email ||
+    proposal.client?.fullName ||
+    proposal.client?.name ||
+    proposal.client?.email ||
+    proposal.user?.fullName ||
+    proposal.user?.name ||
+    proposal.user?.email ||
+    proposal.clientName ||
+    proposal.ownerName ||
+    proposal.senderName ||
+    "Client";
   return {
     id: proposal.id,
     title: proposal.project?.title || proposal.title || "Proposal",
     category: proposal.project?.description ? "Project" : proposal.category || "General",
     status: normalizeProposalStatus(proposal.status || "PENDING"),
-    recipientName: proposal.project?.owner?.fullName || "Client",
-    recipientId: proposal.project?.owner?.id || "CLIENT",
+    recipientName: clientName,
+    recipientId:
+      proposal.project?.owner?.id ||
+      proposal.client?.id ||
+      proposal.user?.id ||
+      proposal.ownerId ||
+      "CLIENT",
     projectId: proposal.project?.id || null,
     freelancerId: proposal.freelancerId || null,
     submittedDate: proposal.createdAt
@@ -75,11 +102,17 @@ const mapApiProposal = (proposal = {}) => {
     avatar:
       proposal.avatar ||
       "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=256&q=80",
-    budget: proposal.amount || null
+    budget: proposal.amount || null,
+    content:
+      proposal.content ||
+      proposal.description ||
+      proposal.summary ||
+      proposal.project?.description ||
+      "",
   };
 };
 
-const ProposalCard = ({ proposal, onStatusChange }) => {
+const ProposalCard = ({ proposal, onStatusChange, onOpen }) => {
   const config = statusConfig[proposal.status];
   const StatusIcon = config.icon;
 
@@ -118,24 +151,10 @@ const ProposalCard = ({ proposal, onStatusChange }) => {
             <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <p className="uppercase tracking-widest text-[10px]">
-                  Recipient
+                  Client
                 </p>
                 <p className="font-medium text-foreground">
                   {proposal.recipientName}
-                </p>
-              </div>
-              <div>
-                <p className="uppercase tracking-widest text-[10px]">ID</p>
-                <p className="font-medium text-foreground">
-                  {proposal.recipientId}
-                </p>
-              </div>
-              <div className="hidden lg:block">
-                <p className="uppercase tracking-widest text-[10px]">
-                  Proposal ID
-                </p>
-                <p className="font-mono text-foreground">
-                  {proposal.proposalId}
                 </p>
               </div>
               <div>
@@ -151,11 +170,11 @@ const ProposalCard = ({ proposal, onStatusChange }) => {
 
           <div className="flex flex-shrink-0 items-center gap-2 self-start lg:self-auto">
             <Button
-              asChild
               size="sm"
-              className="hidden sm:inline-flex bg-primary text-primary-foreground hover:bg-primary/90"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => onOpen?.(proposal)}
             >
-              <Link to={`/freelancer/proposals/${proposal.id}`}>Open</Link>
+              Open
             </Button>
             {proposal.status === "pending" && (
               <Button
@@ -203,7 +222,7 @@ const ProposalCard = ({ proposal, onStatusChange }) => {
   );
 };
 
-const Section = ({ title, items, onStatusChange, empty }) => (
+const Section = ({ title, items, onStatusChange, onOpenProposal, empty }) => (
   <div className="space-y-3">
     <div className="flex items-center justify-between">
       <h2 className="text-lg font-semibold">{title}</h2>
@@ -220,6 +239,7 @@ const Section = ({ title, items, onStatusChange, empty }) => (
             key={proposal.id}
             proposal={proposal}
             onStatusChange={onStatusChange}
+            onOpen={onOpenProposal}
           />
         ))}
       </div>
@@ -227,33 +247,34 @@ const Section = ({ title, items, onStatusChange, empty }) => (
   </div>
 );
 
-const loadStoredProposals = () => {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem("freelancer:receivedProposals") || "[]");
-  } catch {
-    return [];
-  }
-};
-
-const saveStoredProposals = (proposals) => {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("freelancer:receivedProposals", JSON.stringify(proposals));
-};
-
 const FreelancerProposalContent = ({ filter = "all" }) => {
   const { authFetch, isAuthenticated } = useAuth();
   const [proposals, setProposals] = useState([]);
+  const [selectedProposal, setSelectedProposal] = useState(null);
+  const [isLoadingProposal, setIsLoadingProposal] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) return;
 
     const fetchProposals = async () => {
       try {
-        const response = await authFetch("/proposals");
-        const payload = await response.json().catch(() => null);
-        const remote = Array.isArray(payload?.data) ? payload.data : [];
-        setProposals(remote.map(mapApiProposal));
+        const [asFreelancer, asOwner] = await Promise.all([
+          authFetch("/proposals"),
+          authFetch("/proposals?as=owner")
+        ]);
+
+        const payloadFreelancer = await asFreelancer.json().catch(() => null);
+        const payloadOwner = await asOwner.json().catch(() => null);
+
+        const remoteFreelancer = Array.isArray(payloadFreelancer?.data) ? payloadFreelancer.data : [];
+        const remoteOwner = Array.isArray(payloadOwner?.data) ? payloadOwner.data : [];
+
+        const mergedMap = new Map();
+        [...remoteFreelancer, ...remoteOwner].forEach((p) => {
+          if (p?.id) mergedMap.set(p.id, p);
+        });
+
+        setProposals(Array.from(mergedMap.values()).map(mapApiProposal));
       } catch (error) {
         console.error("Failed to load freelancer proposals from API:", error);
       }
@@ -277,6 +298,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
       try {
         await authFetch(`/proposals/${id}`, { method: "DELETE" });
         setProposals((prev) => prev.filter((p) => p.id !== id));
+        setSelectedProposal((prev) => (prev?.id === id ? null : prev));
       } catch (error) {
         console.error("Failed to delete proposal:", error);
         toast.error("Unable to delete proposal. Please try again.");
@@ -285,25 +307,75 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
     }
 
     const apiStatus =
-      nextStatus === "received" ? "PENDING" : nextStatus.toUpperCase();
+      nextStatus === "received"
+        ? "PENDING"
+        : nextStatus === "accepted"
+        ? "ACCEPTED"
+        : nextStatus === "rejected"
+        ? "REJECTED"
+        : "PENDING";
 
     try {
       const response = await authFetch(`/proposals/${id}/status`, {
         method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({ status: apiStatus })
       });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null);
+        const message =
+          errorPayload?.message ||
+          errorPayload?.error ||
+          "Unable to update proposal status.";
+        throw new Error(message);
+      }
+
       const payload = await response.json().catch(() => null);
       const apiProposal = payload?.data ? mapApiProposal(payload.data) : null;
       if (apiProposal) {
         setProposals((prev) =>
           prev.map((proposal) => (proposal.id === id ? apiProposal : proposal))
         );
+        setSelectedProposal((prev) => (prev?.id === id ? apiProposal : prev));
       }
     } catch (error) {
       console.error("Failed to persist proposal status:", error);
       toast.error(error?.message || "Unable to update proposal status.");
     }
   };
+
+  const handleOpenProposal = async (proposal) => {
+    setSelectedProposal(proposal);
+    if (!proposal?.id) return;
+    setIsLoadingProposal(true);
+    try {
+      const response = await authFetch(`/proposals/${proposal.id}`);
+      const payload = await response.json().catch(() => null);
+      if (payload?.data) {
+        setSelectedProposal(mapApiProposal(payload.data));
+        // hydrate local cache with fresh content for this proposal if it exists locally
+        try {
+          const stored = loadStoredProposals();
+          const idx = stored.findIndex((p) => p.id === proposal.id);
+          if (idx >= 0) {
+            stored[idx] = mapApiProposal(payload.data);
+            saveStoredProposals(stored);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load proposal details:", error);
+      toast.error("Unable to load full proposal details right now.");
+    } finally {
+      setIsLoadingProposal(false);
+    }
+  };
+  const handleCloseProposal = () => setSelectedProposal(null);
 
   const allowedFilters = ["pending", "received", "accepted", "rejected"];
   const sectionsToRender =
@@ -321,6 +393,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             title="Pending"
             items={grouped.pending}
             onStatusChange={handleStatusChange}
+            onOpenProposal={handleOpenProposal}
             empty="No pending proposals right now."
           />
         )}
@@ -329,6 +402,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             title="Received"
             items={grouped.received}
             onStatusChange={handleStatusChange}
+            onOpenProposal={handleOpenProposal}
             empty="Nothing has been marked received yet."
           />
         )}
@@ -337,6 +411,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             title="Accepted"
             items={grouped.accepted}
             onStatusChange={handleStatusChange}
+            onOpenProposal={handleOpenProposal}
             empty="Accepted proposals will appear here."
           />
         )}
@@ -345,10 +420,112 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             title="Rejected"
             items={grouped.rejected}
             onStatusChange={handleStatusChange}
+            onOpenProposal={handleOpenProposal}
             empty="Rejected items will show here."
           />
         )}
       </div>
+
+      <Dialog
+        open={Boolean(selectedProposal)}
+        onOpenChange={(open) => {
+          if (!open) handleCloseProposal();
+        }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedProposal?.title || "Proposal"}</DialogTitle>
+            <DialogDescription>
+              A quick snapshot of this proposal without leaving the page.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedProposal && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Badge
+                  variant="outline"
+                  className={`flex items-center gap-1 border px-2 py-0.5 text-xs font-medium ${statusConfig[selectedProposal.status]?.className || ""}`}>
+                  {statusConfig[selectedProposal.status]?.icon ? (
+                    React.createElement(statusConfig[selectedProposal.status].icon, {
+                      className: "h-3 w-3",
+                    })
+                  ) : null}
+                  {statusConfig[selectedProposal.status]?.label || "Pending"}
+                </Badge>
+                {selectedProposal.proposalId && (
+                  <Badge variant="outline" className="text-xs font-mono">
+                    {selectedProposal.proposalId}
+                  </Badge>
+                )}
+                {isLoadingProposal && (
+                  <Badge variant="secondary" className="text-xs">
+                    Loading details…
+                  </Badge>
+                )}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
+                  <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                    Recipient
+                  </p>
+                  <p className="font-semibold text-foreground">
+                    {selectedProposal.recipientName}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
+                  <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                    Submitted
+                  </p>
+                  <p className="font-semibold text-foreground">
+                    {selectedProposal.submittedDate}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
+                  <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                    Category
+                  </p>
+                  <p className="font-semibold text-foreground">
+                    {selectedProposal.category}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
+                  <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                    Budget
+                  </p>
+                  <p className="font-semibold text-foreground">
+                    {selectedProposal.budget ? `$${selectedProposal.budget}` : "Not specified"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                  Proposal Details
+                </p>
+                <ScrollArea className="mt-2 pr-2 h-[50vh] w-full">
+                  <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
+                    {selectedProposal.content?.trim() || "No proposal content provided."}
+                  </p>
+                </ScrollArea>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={handleCloseProposal}>
+              Close
+            </Button>
+            {selectedProposal?.status === "received" && (
+              <Button
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={() => handleStatusChange(selectedProposal.id, "accepted")}>
+                Mark as accepted
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

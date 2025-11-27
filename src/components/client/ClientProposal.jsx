@@ -55,12 +55,18 @@ const normalizeProposalStatus = (status = "") => {
 };
 
 const mapApiProposal = (proposal = {}) => {
+  const freelancerName =
+    proposal.freelancer?.fullName ||
+    proposal.freelancer?.name ||
+    proposal.freelancer?.email ||
+    "Freelancer";
+
   return {
     id: proposal.id,
     title: proposal.project?.title || proposal.title || "Proposal",
     category: proposal.project?.description ? "Project" : proposal.category || "General",
     status: normalizeProposalStatus(proposal.status || "PENDING"),
-    recipientName: proposal.freelancer?.fullName || "Freelancer",
+    recipientName: freelancerName,
     recipientId: proposal.freelancer?.id || "FREELANCER",
     submittedDate: proposal.createdAt
       ? new Date(proposal.createdAt).toLocaleDateString()
@@ -73,29 +79,6 @@ const mapApiProposal = (proposal = {}) => {
       "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=256&q=80"
   };
 };
-
-const loadLocalSent = () => {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(window.localStorage.getItem("client:sentProposals") || "[]");
-  } catch {
-    return [];
-  }
-};
-
-const mapLocalProposal = (proposal = {}) => ({
-  id: proposal.id || proposal.proposalId || `prp-${Math.floor(Math.random() * 1e6)}`,
-  title: proposal.title || "Proposal",
-  category: proposal.service || proposal.category || "General",
-  status: normalizeProposalStatus(proposal.status || "SENT"),
-  recipientName: proposal.recipientName || "Freelancer",
-  recipientId: proposal.recipientId || "FREELANCER",
-  submittedDate: proposal.submittedDate || new Date().toLocaleDateString(),
-  proposalId: proposal.proposalId || `PRP-${Math.floor(Math.random() * 9000 + 1000)}`,
-  avatar:
-    proposal.avatar ||
-    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=256&q=80"
-});
 
 const ProposalCard = ({ proposal }) => {
   const config = statusConfig[proposal.status] || statusConfig.sent;
@@ -132,7 +115,7 @@ const ProposalCard = ({ proposal }) => {
 
             <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <p className="uppercase tracking-widest text-[10px]">Recipient</p>
+                <p className="uppercase tracking-widest text-[10px]">Freelancer</p>
                 <p className="font-medium text-foreground">{proposal.recipientName}</p>
               </div>
               <div>
@@ -175,6 +158,7 @@ const ClientProposalContent = () => {
     if (!isAuthenticated) return;
 
     let isMounted = true;
+    let intervalId;
 
     const fetchProposals = async () => {
       try {
@@ -184,23 +168,19 @@ const ClientProposalContent = () => {
         if (!isMounted) return;
 
         const remoteNormalized = remote.map(mapApiProposal);
-        const localNormalized = loadLocalSent().map(mapLocalProposal);
-
-        const mergedMap = new Map();
-        [...remoteNormalized, ...localNormalized].forEach((p) => {
-          if (p?.id) mergedMap.set(p.id, p);
-        });
-
-        setProposals(Array.from(mergedMap.values()));
+        setProposals(remoteNormalized);
       } catch (error) {
         console.error("Failed to load proposals from API:", error);
       }
     };
 
     fetchProposals();
+    // Keep the client dashboard fresh so accepted states appear without reload.
+    intervalId = window.setInterval(fetchProposals, 6000);
 
     return () => {
       isMounted = false;
+      if (intervalId) window.clearInterval(intervalId);
     };
   }, [authFetch, isAuthenticated]);
 

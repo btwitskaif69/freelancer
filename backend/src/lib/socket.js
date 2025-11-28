@@ -36,6 +36,8 @@ export const initSocket = (server) => {
       ? true
       : allowedOrigins;
 
+  const conversationPresence = new Map(); // conversationId -> Set<userId>
+
   const io = new Server(server, {
     path: env.SOCKET_IO_PATH || "/socket.io",
     cors: {
@@ -45,7 +47,19 @@ export const initSocket = (server) => {
   });
 
   io.on("connection", (socket) => {
-    socket.on("chat:join", async ({ conversationId, service }) => {
+    const joinedConversations = new Set();
+    const presenceKeys = new Map(); // conversationId -> userKey
+
+    const broadcastPresence = (conversationId) => {
+      const set = conversationPresence.get(conversationId) || new Set();
+      const online = Array.from(set);
+      io.to(conversationId).emit("chat:presence", {
+        conversationId,
+        online
+      });
+    };
+
+    socket.on("chat:join", async ({ conversationId, service, senderId }) => {
       try {
         const serviceKey = service ? service.toString().trim() : null;
         let conversation = null;
@@ -70,6 +84,15 @@ export const initSocket = (server) => {
 
         socket.join(conversation.id);
         socket.emit("chat:joined", { conversationId: conversation.id });
+        joinedConversations.add(conversation.id);
+
+        // Track presence
+        const userKey = senderId || socket.id;
+        const set = conversationPresence.get(conversation.id) || new Set();
+        set.add(userKey);
+        conversationPresence.set(conversation.id, set);
+        presenceKeys.set(conversation.id, userKey);
+        broadcastPresence(conversation.id);
 
         const history = await prisma.chatMessage.findMany({
           where: { conversationId: conversation.id },
@@ -200,6 +223,34 @@ export const initSocket = (server) => {
         }
       }
     );
+
+    socket.on(
+      "chat:typing",
+      ({ conversationId, typing = true, userId, userName }) => {
+        if (!conversationId) return;
+        socket.to(conversationId).emit("chat:typing", {
+          conversationId,
+          typing,
+          userId: userId || socket.id,
+          userName
+        });
+      }
+    );
+
+    socket.on("disconnect", () => {
+      joinedConversations.forEach((conversationId) => {
+        const set = conversationPresence.get(conversationId);
+        if (!set) return;
+        const key = presenceKeys.get(conversationId) || socket.id;
+        set.delete(key);
+        if (set.size === 0) {
+          conversationPresence.delete(conversationId);
+        } else {
+          conversationPresence.set(conversationId, set);
+        }
+        broadcastPresence(conversationId);
+      });
+    });
   });
 
   return io;

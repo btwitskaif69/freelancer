@@ -299,7 +299,11 @@ const ClientChatContent = () => {
     if (!conversationId || !selectedConversation) return;
 
     const storageKey = `markify:chatConversationId:${selectedConversation.serviceKey || selectedConversation.id}`;
-    const socket = io(SOCKET_IO_URL, { transports: ["websocket"] });
+    const socket = io(SOCKET_IO_URL, {
+      transports: ["polling", "websocket"],
+      withCredentials: true,
+      path: "/socket.io"
+    });
     socketRef.current = socket;
 
     socket.emit("chat:join", {

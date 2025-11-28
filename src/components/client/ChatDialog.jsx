@@ -102,7 +102,9 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
     if (!isOpen || !conversationId) return;
 
     const socket = io(SOCKET_IO_URL, {
-      transports: ["websocket"]
+      transports: ["polling", "websocket"],
+      withCredentials: true,
+      path: "/socket.io"
     });
     socketRef.current = socket;
 

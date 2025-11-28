@@ -37,6 +37,7 @@ export const initSocket = (server) => {
       : allowedOrigins;
 
   const io = new Server(server, {
+    path: env.SOCKET_IO_PATH || "/socket.io",
     cors: {
       origin: corsOrigins,
       credentials: true

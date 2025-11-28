@@ -29,7 +29,9 @@ const ChatArea = ({
   onMessageInputChange,
   onSendMessage,
   sending,
-  currentUser
+  currentUser,
+  typingUsers,
+  online
 }) => {
   const messagesEndRef = useRef(null);
 
@@ -47,15 +49,25 @@ const ChatArea = ({
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden rounded-3xl border border-border/40 bg-gradient-to-br from-background to-background/70">
       <div className="sticky top-0 z-10 flex items-center gap-4 border-b border-border/40 bg-card/60 px-8 py-5 backdrop-blur-xl">
-        <Avatar className="h-12 w-12">
+        <div className="relative">
+          <Avatar className="h-12 w-12">
           <AvatarImage src={"/placeholder.svg"} alt={conversationName} />
           <AvatarFallback className="bg-primary/20 text-primary">
             {conversationName?.[0] || "C"}
           </AvatarFallback>
         </Avatar>
+          <span
+            className={`absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-card ${
+              online ? "bg-emerald-500" : "bg-muted-foreground/40"
+            }`}
+            aria-label={online ? "Online" : "Offline"}
+          />
+        </div>
         <div>
           <p className="text-lg font-semibold">{conversationName}</p>
-          <p className="text-xs text-muted-foreground">Active</p>
+          <p className="text-xs text-muted-foreground">
+            {online ? "Online" : "Offline"}
+          </p>
         </div>
         <Badge variant="outline" className="ml-auto">
           Live
@@ -145,6 +157,16 @@ const ChatArea = ({
             </div>
           );
         })}
+        {typingUsers.length > 0 ? (
+          <div className="flex justify-start">
+            <div className="max-w-[60%] rounded-sm border border-border/60 bg-card/70 px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>
+                {typingUsers[0]} {typingUsers.length > 1 ? "and others" : ""} typing...
+              </span>
+            </div>
+          </div>
+        ) : null}
         <div ref={messagesEndRef} />
       </div>
 
@@ -194,11 +216,16 @@ const ClientChatContent = () => {
   const [useSocket, setUseSocket] = useState(SOCKET_ENABLED);
   const socketRef = useRef(null);
   const pollRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const [typingUsers, setTypingUsers] = useState([]);
+  const [online, setOnline] = useState(false);
 
   // Reset state when switching conversation to avoid cross-chat bleed.
   useEffect(() => {
     setConversationId(null);
     setMessages([]);
+    setTypingUsers([]);
+    setOnline(false);
   }, [selectedConversation?.serviceKey, selectedConversation?.id]);
 
   const stopPolling = () => {
@@ -218,6 +245,26 @@ const ClientChatContent = () => {
     } catch (error) {
       console.error("Failed to fetch messages:", error);
     }
+  };
+
+  const emitTyping = () => {
+    if (!useSocket || !socketRef.current || !conversationId) return;
+    const payload = {
+      conversationId,
+      typing: true,
+      userId: user?.id || socketRef.current.id,
+      userName: user?.fullName || user?.name || user?.email || "Someone"
+    };
+    socketRef.current.emit("chat:typing", payload);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    typingTimeoutRef.current = setTimeout(() => {
+      socketRef.current?.emit("chat:typing", {
+        ...payload,
+        typing: false
+      });
+    }, 1500);
   };
 
   const startPolling = () => {
@@ -336,7 +383,8 @@ const ClientChatContent = () => {
 
     socket.emit("chat:join", {
       conversationId,
-      service: selectedConversation.serviceKey || selectedConversation.label || SERVICE_LABEL
+      service: selectedConversation.serviceKey || selectedConversation.label || SERVICE_LABEL,
+      senderId: user?.id || null
     });
 
     socket.on("chat:joined", (payload) => {
@@ -391,6 +439,30 @@ const ClientChatContent = () => {
       setSending(false);
     });
 
+    socket.on("chat:typing", ({ conversationId: cid, typing, userId: uid, userName }) => {
+      if (!cid || cid !== conversationId) return;
+      if (uid && user?.id && uid === user.id) return;
+      setTypingUsers((prev) => {
+        const existing = new Map(prev.map((u) => [u.id, u.name]));
+        if (typing) {
+          existing.set(uid || userName || "unknown", userName || "Someone");
+        } else {
+          existing.delete(uid || userName || "unknown");
+        }
+        return Array.from(existing.entries()).map(([id, name]) => ({
+          id,
+          name
+        }));
+      });
+    });
+
+    socket.on("chat:presence", ({ conversationId: cid, online: list = [] }) => {
+      if (!cid || cid !== conversationId) return;
+      const selfId = user?.id;
+      const othersOnline = list.some((id) => (selfId ? id !== selfId : true));
+      setOnline(othersOnline);
+    });
+
     socket.on("connect_error", (error) => {
       console.error("Socket connection error:", error?.message || error);
       setUseSocket(false);
@@ -443,6 +515,11 @@ const ClientChatContent = () => {
         })
         .finally(() => setSending(false));
     }
+  };
+
+  const handleInputChange = (value) => {
+    setMessageInput(value);
+    emitTyping();
   };
 
   const activeMessages = useMemo(() => messages, [messages]);
@@ -526,10 +603,12 @@ const ClientChatContent = () => {
           conversationName={selectedConversation?.label || SERVICE_LABEL}
           messages={activeMessages}
           messageInput={messageInput}
-          onMessageInputChange={setMessageInput}
+          onMessageInputChange={handleInputChange}
           onSendMessage={handleSendMessage}
           sending={sending}
           currentUser={user}
+          typingUsers={typingUsers.map((u) => u.name)}
+          online={online}
         />
       </div>
     </div>

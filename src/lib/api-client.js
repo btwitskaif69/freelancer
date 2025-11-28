@@ -7,6 +7,8 @@ const normalizeBaseUrl = (url) => {
 // then local dev fallback.
 const safeWindow = typeof window === "undefined" ? null : window;
 const envBaseUrl = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
+const envSocketUrl = normalizeBaseUrl(import.meta.env.VITE_SOCKET_URL);
+const envSocketPath = import.meta.env.VITE_SOCKET_PATH;
 
 const sameOriginBaseUrl =
   safeWindow && safeWindow.location.origin && safeWindow.location.origin !== "http://localhost:5173"
@@ -27,12 +29,24 @@ export const API_BASE_URL =
   normalizeBaseUrl(localDevBaseUrl) ||
   "http://localhost:5000/api";
 
-export const SOCKET_IO_URL = API_BASE_URL.replace(/\/api$/, "");
+const defaultSocketUrl =
+  safeWindow && safeWindow.location.hostname === "localhost"
+    ? API_BASE_URL.replace(/\/api$/, "")
+    : null;
+
+const inferredSocketUrl = envSocketUrl || defaultSocketUrl;
+
+const inferredSocketPath = envSocketPath || "/socket.io";
+
+export const SOCKET_IO_URL = inferredSocketUrl;
+export const SOCKET_ENABLED = Boolean(inferredSocketUrl);
 export const SOCKET_OPTIONS = {
   transports: ["polling"], // prevent websocket upgrade on hosts that do not support it (e.g., Vercel serverless)
   upgrade: false, // keep the transport stable so it works globally
   withCredentials: true,
-  path: "/socket.io"
+  path: inferredSocketPath,
+  reconnectionAttempts: 3,
+  reconnectionDelay: 1000
 };
 
 const defaultHeaders = {
@@ -142,6 +156,28 @@ export const fetchChatMessages = (conversationId) => {
   });
 };
 
+export const sendChatMessage = ({
+  conversationId,
+  content,
+  service,
+  senderId,
+  senderRole,
+  senderName,
+  skipAssistant = true
+}) => {
+  return request(`/chat/conversations/${conversationId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({
+      content,
+      service,
+      senderId,
+      senderRole,
+      senderName,
+      skipAssistant
+    })
+  });
+};
+
 export const listFreelancers = (params = {}) => {
   const query = new URLSearchParams({ role: "FREELANCER", ...params }).toString();
   return request(`/users?${query}`, {
@@ -154,5 +190,6 @@ export const apiClient = {
   login,
   chat,
   createChatConversation,
-  fetchChatMessages
+  fetchChatMessages,
+  sendChatMessage
 };

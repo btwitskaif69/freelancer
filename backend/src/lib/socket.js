@@ -31,9 +31,14 @@ const toHistoryMessage = (message) => ({
 });
 
 export const initSocket = (server) => {
+  const corsOrigins =
+    allowedOrigins.includes("*") || allowedOrigins.length === 0
+      ? true
+      : allowedOrigins;
+
   const io = new Server(server, {
     cors: {
-      origin: allowedOrigins.includes("*") ? true : allowedOrigins,
+      origin: corsOrigins,
       credentials: true
     }
   });

@@ -323,3 +323,91 @@ export const getConversationMessages = asyncHandler(async (req, res) => {
         }
     });
 });
+
+export const addConversationMessage = asyncHandler(async (req, res) => {
+  const conversationId = req.params?.id;
+  const {
+    content,
+    service,
+    senderId,
+    senderRole,
+    senderName,
+    skipAssistant = false
+  } = req.body || {};
+
+  if (!content) {
+    throw new AppError("Message content is required", 400);
+  }
+
+  const serviceKey = normalizeService(service);
+  let conversation = null;
+
+  if (conversationId) {
+    conversation = await prisma.chatConversation.findUnique({
+      where: { id: conversationId }
+    });
+  }
+
+  if (!conversation && serviceKey) {
+    conversation = await prisma.chatConversation.findFirst({
+      where: { service: serviceKey }
+    });
+  }
+
+  if (!conversation) {
+    conversation = await prisma.chatConversation.create({
+      data: {
+        service: serviceKey,
+        createdById: senderId || null
+      }
+    });
+  }
+
+  const userMessage = await prisma.chatMessage.create({
+    data: {
+      conversationId: conversation.id,
+      senderId: senderId || null,
+      senderName: senderName || null,
+      senderRole: senderRole || null,
+      role: "user",
+      content
+    }
+  });
+
+  let assistantMessage = null;
+
+  if (!skipAssistant) {
+    const dbHistory = await prisma.chatMessage.findMany({
+      where: { conversationId: conversation.id },
+      orderBy: { createdAt: "asc" },
+      take: 20
+    });
+
+    try {
+      const assistantReply = await generateChatReply({
+        message: content,
+        service: service || conversation.service || "",
+        history: dbHistory.map(toHistoryMessage)
+      });
+
+      assistantMessage = await prisma.chatMessage.create({
+        data: {
+          conversationId: conversation.id,
+          senderName: "Assistant",
+          senderRole: "assistant",
+          role: "assistant",
+          content: assistantReply
+        }
+      });
+    } catch (error) {
+      console.error("Assistant generation failed (HTTP):", error);
+    }
+  }
+
+  res.status(201).json({
+    data: {
+      message: serializeMessage(userMessage),
+      assistant: assistantMessage ? serializeMessage(assistantMessage) : null
+    }
+  });
+});

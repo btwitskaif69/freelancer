@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ClientTopBar } from "@/components/client/ClientTopBar";
 import { SendHorizontal, Paperclip, Bot, User, Loader2, Clock4 } from "lucide-react";
-import { apiClient, SOCKET_IO_URL, SOCKET_OPTIONS } from "@/lib/api-client";
+import { apiClient, SOCKET_IO_URL, SOCKET_OPTIONS, SOCKET_ENABLED } from "@/lib/api-client";
 import { useAuth } from "@/context/AuthContext";
 
 const SERVICE_LABEL = "Project Chat";
@@ -191,13 +191,40 @@ const ClientChatContent = () => {
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [useSocket, setUseSocket] = useState(SOCKET_ENABLED);
   const socketRef = useRef(null);
+  const pollRef = useRef(null);
 
   // Reset state when switching conversation to avoid cross-chat bleed.
   useEffect(() => {
     setConversationId(null);
     setMessages([]);
   }, [selectedConversation?.serviceKey, selectedConversation?.id]);
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const fetchMessages = async () => {
+    if (!conversationId) return;
+    try {
+      const payload = await apiClient.fetchChatMessages(conversationId);
+      const nextMessages =
+        payload?.data?.messages || payload?.messages || [];
+      setMessages(nextMessages);
+    } catch (error) {
+      console.error("Failed to fetch messages:", error);
+    }
+  };
+
+  const startPolling = () => {
+    stopPolling();
+    fetchMessages();
+    pollRef.current = setInterval(fetchMessages, 5000);
+  };
 
   // Load freelancers you've engaged with (from proposals as owner)
   useEffect(() => {
@@ -299,8 +326,13 @@ const ClientChatContent = () => {
     if (!conversationId || !selectedConversation) return;
 
     const storageKey = `markify:chatConversationId:${selectedConversation.serviceKey || selectedConversation.id}`;
-    const socket = io(SOCKET_IO_URL, SOCKET_OPTIONS);
+    const socket = useSocket && SOCKET_IO_URL ? io(SOCKET_IO_URL, SOCKET_OPTIONS) : null;
     socketRef.current = socket;
+
+    if (!socket) {
+      startPolling();
+      return () => stopPolling();
+    }
 
     socket.emit("chat:join", {
       conversationId,
@@ -359,17 +391,27 @@ const ClientChatContent = () => {
       setSending(false);
     });
 
-    return () => {
+    socket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error?.message || error);
+      setUseSocket(false);
+      stopPolling();
+      startPolling();
       socket.disconnect();
+    });
+
+    return () => {
+      stopPolling();
+      if (socket) {
+        socket.disconnect();
+      }
       socketRef.current = null;
     };
-  }, [conversationId, selectedConversation]);
+  }, [conversationId, selectedConversation, useSocket]);
 
   const handleSendMessage = () => {
-    if (!messageInput.trim() || !socketRef.current) return;
+    if (!messageInput.trim()) return;
 
     const payload = {
-      conversationId,
       content: messageInput,
       service: selectedConversation?.serviceKey || selectedConversation?.label || SERVICE_LABEL,
       senderId: user?.id || null,
@@ -381,7 +423,26 @@ const ClientChatContent = () => {
     setMessages((prev) => [...prev, { ...payload, role: "user", pending: true }]);
     setMessageInput("");
     setSending(true);
-    socketRef.current.emit("chat:message", payload);
+
+    if (useSocket && socketRef.current) {
+      socketRef.current.emit("chat:message", payload);
+    } else {
+      apiClient
+        .sendChatMessage({ ...payload, conversationId })
+        .then((response) => {
+          const userMsg =
+            response?.data?.message || response?.message || payload;
+          const assistant =
+            response?.data?.assistant || response?.assistant || null;
+          setMessages((prev) =>
+            assistant ? [...prev, userMsg, assistant] : [...prev, userMsg]
+          );
+        })
+        .catch((error) => {
+          console.error("Failed to send message via HTTP:", error);
+        })
+        .finally(() => setSending(false));
+    }
   };
 
   const activeMessages = useMemo(() => messages, [messages]);

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Loader2, User, Bot } from "lucide-react";
-import { apiClient, SOCKET_IO_URL, SOCKET_OPTIONS } from "@/lib/api-client";
+import { apiClient, SOCKET_IO_URL, SOCKET_OPTIONS, SOCKET_ENABLED } from "@/lib/api-client";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -26,6 +26,7 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
   const [editedText, setEditedText] = useState("");
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   const [conversationId, setConversationId] = useState(null);
+  const [useSocket] = useState(SOCKET_ENABLED);
   const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const scrollRef = useRef(null);
@@ -99,7 +100,7 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
 
   // Wire up socket.io for real-time chat.
   useEffect(() => {
-    if (!isOpen || !conversationId) return;
+    if (!isOpen || !conversationId || !useSocket || !SOCKET_IO_URL) return;
 
     const socket = io(SOCKET_IO_URL, SOCKET_OPTIONS);
     socketRef.current = socket;
@@ -141,7 +142,25 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [conversationId, isOpen, service]);
+  }, [conversationId, isOpen, service, useSocket]);
+
+  // Fallback: fetch messages when sockets are disabled/unavailable.
+  useEffect(() => {
+    if (!isOpen || !conversationId || useSocket) return;
+
+    const load = async () => {
+      try {
+        const payload = await apiClient.fetchChatMessages(conversationId);
+        const nextMessages =
+          payload?.data?.messages || payload?.messages || [];
+        setMessages(nextMessages);
+      } catch (error) {
+        console.error("Failed to load messages (HTTP):", error);
+      }
+    };
+
+    load();
+  }, [conversationId, isOpen, useSocket]);
 
   // Seed an opening prompt if there is no history.
   useEffect(() => {
@@ -161,29 +180,54 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
 
   const handleSend = async () => {
     if (!input.trim()) return;
-    if (!socketRef.current) {
-      console.warn("Chat socket not ready");
-      return;
-    }
-
     const payload = {
       conversationId,
       content: input,
       service: serviceKey,
       senderId: user?.id || null,
-      senderRole: user?.role || "GUEST"
+      senderRole: user?.role || "GUEST",
+      skipAssistant: false
     };
 
+    if (useSocket && socketRef.current) {
+      setMessages((prev) => [
+        ...prev,
+        { ...payload, role: "user", pending: true }
+      ]);
+      setInput("");
+      setIsLoading(true);
+      socketRef.current.emit("chat:message", payload);
+      queueMicrotask(() => {
+        inputRef.current?.focus();
+      });
+      return;
+    }
+
+    // HTTP fallback when sockets are unavailable.
     setMessages((prev) => [
       ...prev,
       { ...payload, role: "user", pending: true }
     ]);
     setInput("");
     setIsLoading(true);
-    socketRef.current.emit("chat:message", payload);
-    queueMicrotask(() => {
-      inputRef.current?.focus();
-    });
+    apiClient
+      .sendChatMessage(payload)
+      .then((response) => {
+        const userMsg =
+          response?.data?.message || response?.message || payload;
+        const assistant =
+          response?.data?.assistant || response?.assistant || null;
+        setMessages((prev) =>
+          assistant ? [...prev, userMsg, assistant] : [...prev, userMsg]
+        );
+      })
+      .catch((error) => {
+        console.error("Failed to send chat via HTTP:", error);
+      })
+      .finally(() => {
+        setIsLoading(false);
+        queueMicrotask(() => inputRef.current?.focus());
+      });
   };
 
   const latestProposalMessage =

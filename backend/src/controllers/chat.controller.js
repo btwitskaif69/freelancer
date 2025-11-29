@@ -92,8 +92,8 @@ const devTechFlow = `Conversation format (Development & Tech):
   5) Is this a new project or an existing one that requires updates? (options: New Project, Existing (Update), Existing (Rewrite), Consultation)
   6) Please provide a brief summary of the project (what it does, target audience, 2-3 sentences).
   7) What are the essential features or pages required? (Output options as [MULTI_SELECT: User Auth | Payment Gateway | Admin Panel | Dashboard | Search | Messaging | File Upload])
-  8) Do you have existing designs, wireframes, or concepts ready? (options: Yes (Full Designs), Partial Designs, Wireframes Only, No (Need Design))
-  9) Would you like us to handle the UI/UX design? (options: Yes (Full Design), UI Polish Only, No (Have Designs))
+  8) Do you have existing designs, wireframes, or concepts ready? (options: Yes (Full Designs), Partial Designs, Wireframes Only, No (I need design services))
+  9) Would you like us to handle the UI/UX design? (options: Yes (Full Design), UI Polish Only, No (I have designs))
   10) Do you have a preferred technology stack or platform? (Output options as [MULTI_SELECT: React/Next.js | Node.js | PHP/Laravel | WordPress | Python/Django | No Preference])
   11) Do you require any specific integrations? (Output options as [MULTI_SELECT: Stripe/PayPal | Google Maps | Social Login | CRM | Analytics | None])
   12) Will you require ongoing maintenance or support after the launch? (options: Yes (Monthly), Yes (Ad-hoc), No (Handover only))
@@ -121,6 +121,9 @@ Phase 1: Discovery & Planning - Requirements gathering, defining core features, 
 Phase 2: UI/UX Design - Wireframing, mockup creation, and client review to finalize the user experience.
 Phase 3: Development & Integration - Building the core software/website functionality (e.g., [Service Type]) and integrating necessary APIs.
 Phase 4: Testing & Deployment - Comprehensive QA across target devices and final launch.
+
+Features & Services Included
+[List specific features and services discussed, e.g., User Auth, Dashboard, specific pages, etc.]
 
 Deliverables
 Website Development Functional Beta/Staging link for review.
@@ -188,6 +191,10 @@ Response rules:
 - If the user selects an option, treat it as their answer and move to the next question immediately.
 - When generating the proposal, YOU MUST wrap it in \`[PROPOSAL_DATA]...[/PROPOSAL_DATA]\` tags.
 
+Context & Logic:
+- **Context Awareness**: Reference the user's previous answers in your questions to show understanding (e.g., "Since you need a dashboard, what specific metrics...?").
+- **Compatibility Check**: If the user requests incompatible technologies (e.g., "Shopify + 3D" or "WordPress + React Native" without a headless setup), politely flag the potential conflict or complexity in your response before asking the next question.
+
 Service Info: ${service}
 ${getServiceDetails(service)}   
 ${servicePolicy ? `\n${servicePolicy}\n` : ""}${counterQuestion}
@@ -208,6 +215,7 @@ Your Goal:
 - If a website budget is under ${MIN_WEBSITE_PRICE_DISPLAY}, restate the minimum and suggest a smaller scope or phased plan.
 
 After 3-4 exchanges, or when you have enough info, generate the FULL PROPOSAL using the [PROPOSAL_DATA] template.
+Ensure the "Scope of Work" and "Features & Services" sections are detailed and specific to the user's requests.
 Do NOT generate a partial "Quick Proposal".
 Keep it short and structured.`;
 };

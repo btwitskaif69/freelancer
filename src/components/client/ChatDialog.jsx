@@ -284,10 +284,10 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
                   })();
 
                   // Parse content for suggestions and multi-select
-                  const suggestionMatch = msg.content?.match(/\[SUGGESTIONS:\s*(.*?)\]/i);
+                  const suggestionMatch = msg.content?.match(/\[SUGGESTIONS:\s*([\s\S]*?)\]/i);
                   const suggestions = suggestionMatch ? suggestionMatch[1].split("|").map(s => s.trim()) : [];
 
-                  const multiSelectMatch = msg.content?.match(/\[MULTI_SELECT:\s*(.*?)\]/i);
+                  const multiSelectMatch = msg.content?.match(/\[MULTI_SELECT:\s*([\s\S]*?)\]/i);
                   const multiSelectOptions = multiSelectMatch ? multiSelectMatch[1].split("|").map(s => s.trim()) : [];
 
                   // Parse proposal data
@@ -296,8 +296,8 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
 
                   // Clean content for display
                   let cleanContent = msg.content
-                    ?.replace(/\[SUGGESTIONS:.*?\]/i, "")
-                    .replace(/\[MULTI_SELECT:.*?\]/i, "")
+                    ?.replace(/\[SUGGESTIONS:[\s\S]*?\]/i, "")
+                    .replace(/\[MULTI_SELECT:[\s\S]*?\]/i, "")
                     .replace(/\[PROPOSAL_DATA\][\s\S]*?\[\/PROPOSAL_DATA\]/, "")
                     .trim();
 
@@ -372,20 +372,25 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
                         <div className="flex flex-col gap-2 pl-12 w-full max-w-sm">
                           <div className="flex flex-wrap gap-2">
                             {multiSelectOptions.map((option, idx) => {
-                              const isSelected = input.includes(option);
+                              const currentSelections = input ? input.split(",").map(s => s.trim()).filter(Boolean) : [];
+                              const isSelected = currentSelections.includes(option);
+
                               return (
                                 <button
                                   key={idx}
                                   onClick={() => {
-                                    const current = input ? input.split(", ").filter(Boolean) : [];
-                                    const next = current.includes(option)
-                                      ? current.filter(c => c !== option)
-                                      : [...current, option];
+                                    let next;
+                                    if (isSelected) {
+                                      next = currentSelections.filter(c => c !== option);
+                                    } else {
+                                      next = [...currentSelections, option];
+                                    }
                                     setInput(next.join(", "));
+                                    inputRef.current?.focus();
                                   }}
-                                  className={`text-xs px-3 py-1.5 rounded-full transition-colors border ${input.includes(option)
-                                      ? "bg-primary text-primary-foreground border-primary"
-                                      : "bg-background hover:bg-muted border-input"
+                                  className={`text-xs px-3 py-1.5 rounded-full transition-colors border ${isSelected
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background hover:bg-muted border-input"
                                     }`}
                                 >
                                   {option}
@@ -393,7 +398,7 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
                               );
                             })}
                           </div>
-                          {input && (
+                          {input && multiSelectOptions.length > 0 && (
                             <Button
                               size="sm"
                               className="self-start mt-1"

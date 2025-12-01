@@ -32,12 +32,14 @@ export const API_BASE_URL =
   normalizeBaseUrl(localDevBaseUrl) ||
   "http://localhost:5000/api";
 
-// Only enable sockets on localhost to avoid duplicate events on deployments.
+// Enable sockets when explicitly configured, otherwise only on localhost.
 const allowSockets =
-  safeWindow && safeWindow.location && safeWindow.location.hostname === "localhost";
+  Boolean(envSocketUrl) ||
+  (safeWindow && safeWindow.location && safeWindow.location.hostname === "localhost");
 
-const inferredSocketUrl =
-  allowSockets && (envSocketUrl || API_BASE_URL.replace(/\/api$/, ""));
+const inferredSocketUrl = allowSockets
+  ? envSocketUrl || API_BASE_URL.replace(/\/api$/, "")
+  : null;
 
 const inferredSocketPath = allowSockets ? envSocketPath || "/socket.io" : null;
 

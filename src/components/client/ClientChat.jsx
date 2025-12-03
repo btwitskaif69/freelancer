@@ -15,6 +15,9 @@ import ProposalPanel from "./ProposalPanel";
 
 const SERVICE_LABEL = "Project Chat";
 
+const filterAssistantMessages = (list = []) =>
+  list.filter((msg) => msg?.role !== "assistant");
+
 const formatTime = (value) => {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
@@ -238,7 +241,7 @@ const ClientChatContent = () => {
       const payload = await apiClient.fetchChatMessages(conversationId);
       const nextMessages =
         payload?.data?.messages || payload?.messages || [];
-      setMessages(nextMessages);
+      setMessages(filterAssistantMessages(nextMessages));
     } catch (error) {
       console.error("Failed to fetch messages:", error);
     }
@@ -432,7 +435,7 @@ const ClientChatContent = () => {
       const sorted = [...history].sort(
         (a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0)
       );
-      setMessages(sorted);
+      setMessages(filterAssistantMessages(sorted));
 
       if (
         sorted.length === 0 &&
@@ -454,7 +457,10 @@ const ClientChatContent = () => {
     });
 
     socket.on("chat:message", (message) => {
-      setSending(message?.role !== "assistant");
+      if (message?.role === "assistant") {
+        setSending(false);
+        return;
+      }
       setMessages((prev) => {
         const filtered = prev.filter(
           (msg) =>
@@ -464,6 +470,7 @@ const ClientChatContent = () => {
         );
         return [...filtered, message];
       });
+      setSending(false);
     });
 
     socket.on("chat:error", (payload) => {
@@ -536,11 +543,15 @@ const ClientChatContent = () => {
         .then((response) => {
           const userMsg =
             response?.data?.message || response?.message || payload;
-          const assistant =
-            response?.data?.assistant || response?.assistant || null;
-          setMessages((prev) =>
-            assistant ? [...prev, userMsg, assistant] : [...prev, userMsg]
-          );
+          setMessages((prev) => {
+            const filtered = prev.filter(
+              (msg) =>
+                !msg.pending ||
+                msg.content !== payload.content ||
+                msg.role !== "user"
+            );
+            return [...filtered, userMsg];
+          });
         })
         .catch((error) => {
           console.error("Failed to send message via HTTP:", error);

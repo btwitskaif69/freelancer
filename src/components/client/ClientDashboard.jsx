@@ -150,14 +150,12 @@ const recommendedFreelancers = [
   },
 ];
 
-const PROPOSAL_STORAGE_KEYS = [
+const SAVED_PROPOSAL_STORAGE_KEYS = [
   "markify:savedProposal",
-  "markify:pendingProposal",
-  "pendingProposal",
   "savedProposal",
 ];
 
-const PRIMARY_PROPOSAL_STORAGE_KEY = PROPOSAL_STORAGE_KEYS[0];
+const PRIMARY_PROPOSAL_STORAGE_KEY = SAVED_PROPOSAL_STORAGE_KEYS[0];
 const PROPOSAL_DRAFT_STORAGE_KEY = "markify:pendingProposal";
 
 const loadSavedProposalFromStorage = () => {
@@ -165,7 +163,7 @@ const loadSavedProposalFromStorage = () => {
     return null;
   }
 
-  for (const storageKey of PROPOSAL_STORAGE_KEYS) {
+  for (const storageKey of SAVED_PROPOSAL_STORAGE_KEYS) {
     const rawValue = window.localStorage.getItem(storageKey);
     if (!rawValue) continue;
     try {
@@ -204,9 +202,11 @@ const clearSavedProposalFromStorage = () => {
     return;
   }
 
-  PROPOSAL_STORAGE_KEYS.forEach((storageKey) =>
-    window.localStorage.removeItem(storageKey)
-  );
+  SAVED_PROPOSAL_STORAGE_KEYS.forEach((storageKey) => {
+    window.localStorage.removeItem(storageKey);
+  });
+  // keep drafts (markify:pendingProposal) intact so they remain available on drafts page
+  window.localStorage.removeItem("markify:savedProposalSynced");
 };
 
 const templateMetrics = dashboardTemplate.metrics || [];
@@ -219,6 +219,8 @@ const ClientDashboardContent = () => {
   const [proposalDraft, setProposalDraft] = useState("");
   const [proposalDraftContent, setProposalDraftContent] = useState("");
   const [isFreelancerModalOpen, setIsFreelancerModalOpen] = useState(false);
+  const [pendingSendFreelancer, setPendingSendFreelancer] = useState(null);
+  const [isSendConfirmOpen, setIsSendConfirmOpen] = useState(false);
   const [freelancers, setFreelancers] = useState([]);
   const [freelancersLoading, setFreelancersLoading] = useState(false);
   const { authFetch } = useAuth();
@@ -309,7 +311,7 @@ const ClientDashboardContent = () => {
     }
 
     const handleStorageChange = (event) => {
-      if (event?.key && !PROPOSAL_STORAGE_KEYS.includes(event.key)) {
+      if (event?.key && !SAVED_PROPOSAL_STORAGE_KEYS.includes(event.key)) {
         return;
       }
       setSavedProposal(loadSavedProposalFromStorage());
@@ -329,16 +331,6 @@ const ClientDashboardContent = () => {
       setProposalDeliveryState("idle");
     }
   }, [savedProposal, proposalDeliveryState]);
-
-  useEffect(() => {
-    // keep inline draft textarea in sync when proposal changes
-    const draft =
-      savedProposalDetails?.summary ||
-      savedProposalDetails?.raw?.content ||
-      savedProposalDetails?.raw?.summary ||
-      "";
-    setProposalDraftContent(draft);
-  }, [savedProposalDetails]);
 
   const roleLabel = useMemo(() => {
     const baseRole = sessionUser?.role ?? "CLIENT";
@@ -616,6 +608,23 @@ const ClientDashboardContent = () => {
     setIsFreelancerModalOpen(true);
   };
 
+  const requestSendToFreelancer = (freelancer) => {
+    setPendingSendFreelancer(freelancer);
+    setIsSendConfirmOpen(true);
+  };
+
+  const handleConfirmSend = async () => {
+    if (!pendingSendFreelancer) return;
+    await sendProposalToFreelancer(pendingSendFreelancer);
+    setPendingSendFreelancer(null);
+    setIsSendConfirmOpen(false);
+  };
+
+  const handleCancelSend = () => {
+    setPendingSendFreelancer(null);
+    setIsSendConfirmOpen(false);
+  };
+
   useEffect(() => {
     const fetchFreelancers = async () => {
       try {
@@ -697,24 +706,9 @@ const ClientDashboardContent = () => {
     persistSavedProposalToStorage(updatedProposal);
     persistProposalDraftToStorage(updatedProposal);
     setSavedProposal(updatedProposal);
-    setProposalDraftContent(proposalDraft);
     setProposalDeliveryState("saved");
     setIsEditModalOpen(false);
     toast.success("Proposal updated.");
-  };
-
-  const handleSaveDraftInline = () => {
-    if (!savedProposal) return;
-    const updatedProposal = {
-      ...savedProposal,
-      summary: proposalDraftContent,
-      content: proposalDraftContent,
-      updatedAt: new Date().toISOString(),
-    };
-    persistSavedProposalToStorage(updatedProposal);
-    persistProposalDraftToStorage(updatedProposal);
-    setSavedProposal(updatedProposal);
-    toast.success("Draft saved.");
   };
 
   return (
@@ -802,34 +796,6 @@ const ClientDashboardContent = () => {
               </div>
             </CardHeader>
             <CardContent className="space-y-6 p-6">
-              {hasSavedProposal && (
-                <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.35em] text-primary/70">
-                        Proposal draft
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Quick edits save to your browser as a draft.
-                      </p>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="border border-primary/30"
-                      onClick={handleSaveDraftInline}
-                      disabled={!proposalDraftContent.trim()}
-                    >
-                      Save draft
-                    </Button>
-                  </div>
-                  <textarea
-                    className="w-full min-h-[280px] resize-vertical rounded-lg border border-border bg-background p-4 text-sm text-foreground leading-6"
-                    value={proposalDraftContent}
-                    onChange={(e) => setProposalDraftContent(e.target.value)}
-                  />
-                </div>
-              )}
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.4em] text-primary/70">
                   Project details
@@ -950,7 +916,10 @@ const ClientDashboardContent = () => {
         </section>
         <Dialog
           open={isFreelancerModalOpen}
-          onOpenChange={setIsFreelancerModalOpen}
+          onOpenChange={(open) => {
+            setIsFreelancerModalOpen(open);
+            if (!open) setPendingSendFreelancer(null);
+          }}
         >
           <DialogContent className="sm:max-w-[560px]">
             <DialogHeader>
@@ -995,9 +964,7 @@ const ClientDashboardContent = () => {
                       <Button
                         size="sm"
                         disabled={!canSend}
-                        onClick={() =>
-                          canSend && sendProposalToFreelancer(freelancer)
-                        }
+                        onClick={() => canSend && requestSendToFreelancer(freelancer)}
                       >
                         Send
                       </Button>
@@ -1050,6 +1017,24 @@ const ClientDashboardContent = () => {
               </Button>
               <Button onClick={handleSaveProposalEdit} disabled={!proposalDraft.trim()}>
                 Save changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={isSendConfirmOpen} onOpenChange={handleCancelSend}>
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle>Send this proposal?</DialogTitle>
+              <DialogDescription>
+                This will send the proposal to {pendingSendFreelancer?.name || "the selected freelancer"}.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="justify-end gap-2">
+              <Button variant="ghost" onClick={handleCancelSend}>
+                Cancel
+              </Button>
+              <Button onClick={handleConfirmSend} disabled={!pendingSendFreelancer}>
+                Send now
               </Button>
             </DialogFooter>
           </DialogContent>

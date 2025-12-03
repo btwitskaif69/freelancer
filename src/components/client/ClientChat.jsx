@@ -273,60 +273,40 @@ const ClientChatContent = () => {
     pollRef.current = setInterval(fetchMessages, 5000);
   };
 
-  // Load freelancers you've engaged with (from proposals as owner)
+  // Load conversations for the current user from the backend (Neon DB).
   useEffect(() => {
     let cancelled = false;
     const loadConversations = async () => {
-      if (!authFetch) return;
       try {
-        const response = await authFetch("/proposals?as=owner");
-        const payload = await response.json().catch(() => null);
+        const payload = await apiClient.fetchChatConversations();
         const items = Array.isArray(payload?.data) ? payload.data : [];
 
-        const clientId = user?.id || "client";
+        const mapped = items.map((item) => {
+          const lastSender = item.lastMessage?.senderName || item.lastMessage?.senderRole || "";
+          const selfId = user?.id;
+          const showName =
+            item.lastMessage && item.lastMessage.senderId && selfId && item.lastMessage.senderId !== selfId
+              ? lastSender
+              : item.service || "Conversation";
 
-        // One conversation per proposal to avoid cross-user bleed.
-        const uniqueFinal = items
-          .filter((item) => (item.status || "").toUpperCase() === "ACCEPTED")
-          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-          .map((item) => {
-            const freelancer = item.freelancer || {};
-            const freelancerEmail = (freelancer.email || item.freelancerEmail || "")
-              .toString()
-              .trim()
-              .toLowerCase();
-            const clientEmail = (user?.email || "").toString().trim().toLowerCase();
-            if (
-              (freelancer.id && user?.id && freelancer.id === user.id) ||
-              (freelancerEmail && clientEmail && freelancerEmail === clientEmail)
-            ) {
-              return null;
-            }
-            const freelancerName = (freelancer.fullName || freelancer.name || freelancerEmail || "Freelancer")
-              .toString()
-              .trim();
-            const serviceKey = `CHAT:${clientId}:PROPOSAL:${item.id}`;
+          return {
+            id: item.id,
+            name: showName || "Conversation",
+            label: item.service || SERVICE_LABEL,
+            avatar: "/placeholder.svg",
+            serviceKey: item.service || item.id
+          };
+        });
 
-            return {
-              id: serviceKey,
-              name: freelancerName,
-              avatar:
-                freelancer.avatar ||
-                "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=256&q=80",
-              label: item.title || `Project with ${freelancerName}`,
-              serviceKey,
-              accepted: true
-            };
-          })
-          .filter(Boolean);
+        const uniqueById = Array.from(new Map(mapped.map((c) => [c.id, c])).values());
 
         if (!cancelled) {
-          setConversations(uniqueFinal);
-          setSelectedConversation(uniqueFinal[0] || null);
+          setConversations(uniqueById);
+          setSelectedConversation(uniqueById[0] || null);
         }
       } catch (error) {
         console.error("Failed to load conversations:", error);
-        setConversations([]);
+        if (!cancelled) setConversations([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -335,7 +315,7 @@ const ClientChatContent = () => {
     return () => {
       cancelled = true;
     };
-  }, [authFetch, user?.id]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!selectedConversation) return;
@@ -346,29 +326,20 @@ const ClientChatContent = () => {
       const storageKey = `markify:chatConversationId:${baseKey}`;
 
       try {
+        // Prefer the conversation id from DB.
+        if (selectedConversation.id) {
+          setConversationId(selectedConversation.id);
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(storageKey, selectedConversation.id);
+          }
+          return;
+        }
+
         const stored =
           typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
         if (stored) {
           setConversationId(stored);
           return;
-        }
-
-        // Backward compatibility: try any existing chat conversation keys for this client.
-        if (typeof window !== "undefined") {
-          const clientId = user?.id || "client";
-          const prefix = `markify:chatConversationId:CHAT:${clientId}:`;
-          const legacyKey = Object.keys(window.localStorage || {}).find((key) =>
-            key.startsWith(prefix)
-          );
-          if (legacyKey) {
-            const legacyId = window.localStorage.getItem(legacyKey);
-            if (legacyId) {
-              setConversationId(legacyId);
-              // also cache under new key for future
-              window.localStorage.setItem(storageKey, legacyId);
-              return;
-            }
-          }
         }
 
         const conversation = await apiClient.createChatConversation({

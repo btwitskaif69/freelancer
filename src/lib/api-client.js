@@ -163,6 +163,12 @@ export const createChatConversation = ({ service, ...rest }) => {
   });
 };
 
+export const fetchChatConversations = () => {
+  return request("/chat/conversations", {
+    method: "GET"
+  });
+};
+
 export const fetchChatMessages = (conversationId) => {
   return request(`/chat/conversations/${conversationId}/messages`, {
     method: "GET"
@@ -203,6 +209,7 @@ export const apiClient = {
   login,
   chat,
   createChatConversation,
+  fetchChatConversations,
   fetchChatMessages,
   sendChatMessage
 };

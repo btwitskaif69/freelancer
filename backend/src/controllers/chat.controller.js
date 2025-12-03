@@ -383,6 +383,42 @@ export const chatController = async (req, res) => {
   }
 };
 
+// List conversations for the authenticated user (from DB) with latest message.
+export const listUserConversations = asyncHandler(async (req, res) => {
+  const userId = req.user?.sub;
+  if (!userId) {
+    throw new AppError("Unauthorized", 401);
+  }
+
+  const conversations = await prisma.chatConversation.findMany({
+    where: { createdById: userId },
+    orderBy: { updatedAt: "desc" },
+    take: 100,
+    include: {
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
+
+  const data = conversations.map((c) => ({
+    id: c.id,
+    service: c.service,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+    createdById: c.createdById,
+    lastMessage: c.messages?.[0]
+      ? serializeMessage({
+          ...c.messages[0],
+          createdAt: c.messages[0].createdAt,
+        })
+      : null,
+  }));
+
+  res.json({ data });
+});
+
 export const createConversation = asyncHandler(async (req, res) => {
   const createdById = req.user?.sub || null;
   const serviceKey = normalizeService(req.body?.service);

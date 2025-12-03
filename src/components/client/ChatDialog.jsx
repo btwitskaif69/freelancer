@@ -682,6 +682,18 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
     return [...messages].reverse().find(m => m.content && m.content.includes("PROJECT PROPOSAL"));
   }, [messages]);
 
+  // Once a proposal is generated, drop any cached chat data so the next chat starts clean.
+  useEffect(() => {
+    if (!proposalMessage) return;
+    const storageKey = `markify:chatConversationId:${serviceKey}`;
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(storageKey);
+      if (messageStorageKey) {
+        window.localStorage.removeItem(messageStorageKey);
+      }
+    }
+  }, [proposalMessage, messageStorageKey, serviceKey]);
+  
   const resolveSenderChip = (msg) => {
     if (msg.role === "assistant") return "Assistant";
     return "You";

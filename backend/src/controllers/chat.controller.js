@@ -232,6 +232,8 @@ Response rules:
 - Do NOT use buzzwords, slang, or overly enthusiastic language.
 - Keep responses very short (1-2 sentences max).
 - Ask ONE focused question at a time.
+- Track answers in a simple section map (name, company/project, summary, service type, features/pages, design readiness, tech stack, integrations, budget, timeline, references). If the user says "change/update <section>", jump to that section, ask for the new value, and continue from there without restarting the flow.
+- If the user asks what can be changed, list the editable sections in one line like: "You can update: name, company, summary, features, design, stack, integrations, budget, timeline, references."
 - Output plain text only—no JSON, XML, tool-call syntax, or angle-bracket tokens. Never echo system markers like "<|start|>" or "[call]".
 - Keep an internal checklist of questions already asked/answered from the conversation history. If an item was asked before, skip it—do NOT restart or repeat it.
 - Once the essentials are answered (who: name/company, what: summary + must-have features/pages, how: tech stack/platform, budget, timeline), generate the proposal instead of looping back to earlier questions.
@@ -618,3 +620,4 @@ export const addConversationMessage = asyncHandler(async (req, res) => {
     },
   });
 });
+

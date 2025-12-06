@@ -21,14 +21,7 @@ import { SOP_TEMPLATES } from "@/data/sopTemplates";
 
 
 
-const initialMessages = [
-  {
-    id: "1",
-    sender: "assistant",
-    text: "Hello! How can I help you with this project today?",
-    timestamp: new Date()
-  }
-];
+const initialMessages = [];
 
 const getPhaseIcon = (status) => {
   switch (status) {
@@ -59,7 +52,7 @@ const mapStatus = (status = "") => {
 
 const FreelancerProjectDetailContent = () => {
   const { projectId } = useParams();
-  const { authFetch, isAuthenticated } = useAuth();
+  const { authFetch, isAuthenticated, user } = useAuth();
 
   const [project, setProject] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,8 +80,8 @@ const FreelancerProjectDetailContent = () => {
 
         if (match?.project && active) {
           const normalizedProgress = (() => {
-            const value = Number(match.project.progress ?? match.progress ?? 35);
-            return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 35;
+            const value = Number(match.project.progress ?? match.progress ?? 0);
+            return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
           })();
 
           const normalizedBudget = (() => {
@@ -98,6 +91,7 @@ const FreelancerProjectDetailContent = () => {
 
           setProject({
             id: match.project.id,
+            ownerId: match.project.ownerId, // Needed for chat key
             title: match.project.title || "Project",
             client:
               match.project.owner?.fullName ||
@@ -106,7 +100,8 @@ const FreelancerProjectDetailContent = () => {
               "Client",
             progress: normalizedProgress,
             status: match.project.status || match.status || "IN_PROGRESS",
-            budget: normalizedBudget
+            budget: normalizedBudget,
+            spent: Number(match.project.spent || 0)
           });
           setIsFallback(false);
         } else if (active) {
@@ -134,26 +129,26 @@ const FreelancerProjectDetailContent = () => {
 
   // Create or reuse a chat conversation for this project
   useEffect(() => {
-    if (!project || !authFetch) return;
-    const storageKey = `freelancer:projectChat:${project.id}`;
+    if (!project || !authFetch || !user?.id) return;
+    
+    // Key Logic: CHAT:OWNER_ID:FREELANCER_ID (User is Freelancer)
+    // Fallback to project:ID only if owner unknown, but for sync needs CHAT:...
+    let key = `project:${project.id}`;
+    if (project.ownerId && user.id) {
+        key = `CHAT:${project.ownerId}:${user.id}`;
+    }
+    
+    console.log("Freelancer Chat Init - Key:", key);
+    
     let cancelled = false;
 
     const ensureConversation = async () => {
       try {
-        const existing =
-          typeof window !== "undefined"
-            ? window.localStorage.getItem(storageKey)
-            : null;
-        if (existing) {
-          setConversationId(existing);
-          return;
-        }
-
         const response = await authFetch("/chat/conversations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            service: `project:${project.id}`,
+            service: key,
             forceNew: false
           })
         });
@@ -162,9 +157,6 @@ const FreelancerProjectDetailContent = () => {
         const convo = payload?.data || payload;
         if (convo?.id && !cancelled) {
           setConversationId(convo.id);
-          if (typeof window !== "undefined") {
-            window.localStorage.setItem(storageKey, convo.id);
-          }
         }
       } catch (error) {
         console.error("Failed to create project chat conversation", error);
@@ -175,7 +167,7 @@ const FreelancerProjectDetailContent = () => {
     return () => {
       cancelled = true;
     };
-  }, [authFetch, project]);
+  }, [authFetch, project, user]);
 
   // Load chat history
   useEffect(() => {
@@ -188,62 +180,74 @@ const FreelancerProjectDetailContent = () => {
         const list = Array.isArray(payload?.data?.messages)
           ? payload.data.messages
           : payload?.messages || [];
+          
         if (!cancelled) {
-          const normalized = list.map((msg) => ({
-            id: msg.id || `${msg.createdAt}-${msg.content?.slice(0, 5)}`,
-            sender: msg.role === "assistant" ? "assistant" : "user",
-            text: msg.content,
-            timestamp: msg.createdAt ? new Date(msg.createdAt) : new Date()
-          }));
-          setMessages(normalized.length ? normalized : initialMessages);
+          const normalized = list.map((msg) => {
+             // Logic: I am the freelancer.
+             // If senderId == my id, it's me.
+             // If senderRole == 'FREELANCER', it's me.
+             // Everything else (Client/Assistant) is 'other'.
+             const isMe = (user?.id && msg.senderId === user.id) || msg.senderRole === "FREELANCER";
+             
+             return {
+                id: msg.id,
+                sender: msg.role === "assistant" ? "assistant" : (isMe ? "user" : "other"),
+                text: msg.content,
+                timestamp: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+                attachment: msg.attachment,
+                senderName: msg.senderName
+             };
+          });
+          
+          // Merge logic to keep pending messages
+          setMessages(prev => {
+             const pending = prev.filter(m => m.pending);
+             const backendIds = new Set(normalized.map(m => m.id));
+             const stillPending = pending.filter(p => !backendIds.has(p.id));
+             return [...normalized, ...stillPending];
+          });
         }
       } catch (error) {
         console.error("Failed to load project chat messages", error);
       }
     };
     loadMessages();
+    const interval = setInterval(loadMessages, 5000);
     return () => {
+      clearInterval(interval);
       cancelled = true;
     };
-  }, [authFetch, conversationId]);
+  }, [authFetch, conversationId, user]);
 
   const handleSendMessage = async () => {
     if (!input.trim() || !conversationId || !authFetch) return;
+    
+    // Optimistic message
+    const tempId = Date.now().toString();
     const userMessage = {
-      id: Date.now().toString(),
+      id: tempId,
       sender: "user",
       text: input,
-      timestamp: new Date()
+      timestamp: new Date(),
+      pending: true
     };
+    
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsSending(true);
 
     try {
-      const response = await authFetch(`/chat/conversations/${conversationId}/messages`, {
+      await authFetch(`/chat/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             content: userMessage.text,
             service: `project:${project?.id || projectId}`,
             senderRole: "FREELANCER",
-            skipAssistant: true
+            skipAssistant: true // Persist to DB
           })
         });
-
-      const payload = await response.json().catch(() => null);
-      const apiMessage = payload?.data?.message || payload?.message || null;
-      if (apiMessage?.content) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: apiMessage.id || `${Date.now()}-api`,
-            sender: apiMessage.role === "assistant" ? "assistant" : "user",
-            text: apiMessage.content,
-            timestamp: apiMessage.createdAt ? new Date(apiMessage.createdAt) : new Date()
-          }
-        ]);
-      }
+        // Polling will fetch the real message
     } catch (error) {
       console.error("Failed to send project chat message", error);
     } finally {
@@ -251,31 +255,40 @@ const FreelancerProjectDetailContent = () => {
     }
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (file && conversationId) {
+      const attachment = {
+          name: file.name,
+          size: `${(file.size / 1024).toFixed(2)} KB`,
+          type: file.type
+      };
+      
       const userMessage = {
         id: Date.now().toString(),
         sender: "user",
         text: `Uploaded document: ${file.name}`,
         timestamp: new Date(),
-        attachment: {
-          name: file.name,
-          size: `${(file.size / 1024).toFixed(2)} KB`
-        }
+        attachment,
+        pending: true
       };
 
       setMessages((prev) => [...prev, userMessage]);
 
-      setTimeout(() => {
-        const assistantMessage = {
-          id: (Date.now() + 1).toString(),
-          sender: "assistant",
-          text: `Received "${file.name}". I'll review it.`,
-          timestamp: new Date()
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-      }, 500);
+      try {
+         await authFetch(`/chat/conversations/${conversationId}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                content: `Uploaded document: ${file.name}`,
+                senderRole: "FREELANCER",
+                attachment,
+                skipAssistant: true
+            })
+         });
+      } catch(e) {
+         console.error("Upload failed", e);
+      }
 
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -283,8 +296,13 @@ const FreelancerProjectDetailContent = () => {
     }
   };
 
+  const docs = useMemo(() => {
+    return messages.filter(m => m.attachment).map(m => m.attachment);
+  }, [messages]);
+
   const activeSOP = useMemo(() => {
     if (!project?.title) return SOP_TEMPLATES.WEBSITE;
+
     const title = project.title.toLowerCase();
     if (
       title.includes("app") ||
@@ -459,10 +477,23 @@ const FreelancerProjectDetailContent = () => {
       const value = Number(project.budget);
       if (Number.isFinite(value)) return Math.max(0, value);
     }
-    return 50000;
+    return 0;
   }, [project]);
-  const spentBudget = useMemo(() => Math.round(totalBudget * 0.5), [totalBudget]);
+  
+  const spentBudget = useMemo(() => {
+       return project?.spent ? Number(project.spent) : 0;
+  }, [project]);
+  
   const remainingBudget = useMemo(() => Math.max(0, totalBudget - spentBudget), [spentBudget, totalBudget]);
+
+  const activePhase = useMemo(() => {
+    return derivedPhases.find(p => p.status !== "completed") || derivedPhases[derivedPhases.length - 1];
+  }, [derivedPhases]);
+
+  const visibleTasks = useMemo(() => {
+    if (!activePhase) return [];
+    return derivedTasks.filter(t => t.phase === activePhase.id);
+  }, [derivedTasks, activePhase]);
 
   return (
     <RoleAwareSidebar>
@@ -553,14 +584,17 @@ const FreelancerProjectDetailContent = () => {
 
               <Card className="border border-border/60 bg-card/80 shadow-sm backdrop-blur">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg text-foreground">Tasks & Checklist</CardTitle>
+                  <CardTitle className="text-lg text-foreground">
+                    Tasks & Checklist {activePhase ? `- ${activePhase.name}` : ""}
+                  </CardTitle>
                   <CardDescription className="text-muted-foreground">
-                    {derivedTasks.filter((t) => t.status === "completed").length} of {derivedTasks.length} tasks
+                    {derivedTasks.filter((t) => t.status === "completed").length} of {derivedTasks.length} total tasks
                     completed
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {derivedTasks.map((task) => (
+                  {visibleTasks.length > 0 ? (
+                    visibleTasks.map((task) => (
                     <div
                       key={task.id}
                       className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-card hover:bg-accent transition-colors"
@@ -581,7 +615,10 @@ const FreelancerProjectDetailContent = () => {
                         Phase {task.phase}
                       </Badge>
                     </div>
-                  ))}
+                  ))
+                  ) : (
+                     <p className="text-sm text-muted-foreground">No tasks available for this phase.</p>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -595,9 +632,21 @@ const FreelancerProjectDetailContent = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    No documents attached yet. Upload project documentation here.
-                  </p>
+                  {docs.length > 0 ? (
+                    <div className="space-y-2">
+                      {docs.map((doc, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-sm p-2 border border-border/60 rounded bg-muted/20">
+                           <FileText className="w-4 h-4 text-primary" />
+                           <span className="truncate flex-1">{doc.name}</span>
+                           <span className="text-xs text-muted-foreground">{doc.size}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No documents attached yet. Upload project documentation here.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 

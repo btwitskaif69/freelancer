@@ -79,7 +79,7 @@ const ChatArea = ({
 
       <div className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-6 py-4">
         {messages.map((message, index) => {
-          const isSelf = message.senderId && currentUser?.id && message.senderId === currentUser.id;
+          const isSelf = (message.senderId && currentUser?.id && message.senderId == currentUser.id) || message.senderRole === "CLIENT";
           const isAssistant = message.role === "assistant";
           const align = isAssistant || !isSelf ? "justify-start" : "justify-end";
           const isDeleted = message.deleted || message.isDeleted;
@@ -91,10 +91,11 @@ const ChatArea = ({
               return "bg-muted/30 text-muted-foreground border border-border/50 italic";
             }
             if (isSelf) {
-              return "bg-card text-card-foreground border border-border/50 shadow-sm";
+              // Self: Primary color (Yellow)
+              return "bg-primary text-primary-foreground shadow-sm border-none shadow-sm";
             }
-            // Received messages (Client or Freelancer) -- NOW PRIMARY
-            return "bg-primary text-neutral-900 shadow-sm border-none shadow-sm";
+            // Received (Freelancer): Muted/Grey
+            return "bg-card text-card-foreground border border-border/50 shadow-sm";
           })();
 
           return (

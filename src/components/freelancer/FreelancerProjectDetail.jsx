@@ -18,6 +18,82 @@ import { RoleAwareSidebar } from "@/components/dashboard/RoleAwareSidebar";
 import { FreelancerTopBar } from "@/components/freelancer/FreelancerTopBar";
 import { useAuth } from "@/context/AuthContext";
 import { SOP_TEMPLATES } from "@/data/sopTemplates";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Skeleton Loading Component
+const ProjectDetailSkeleton = () => (
+  <div className="min-h-screen bg-background text-foreground p-6 md:p-8 w-full">
+    <div className="w-full max-w-full mx-auto space-y-6">
+      <div className="space-y-2">
+        <Skeleton className="h-9 w-64" />
+        <Skeleton className="h-4 w-96" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="border border-border/60 bg-card/80">
+          <CardHeader className="pb-2"><Skeleton className="h-4 w-24" /></CardHeader>
+          <CardContent>
+            <Skeleton className="h-8 w-16 mb-3" />
+            <Skeleton className="h-2 w-full" />
+          </CardContent>
+        </Card>
+        <Card className="border border-border/60 bg-card/80">
+          <CardHeader className="pb-2"><Skeleton className="h-4 w-32" /></CardHeader>
+          <CardContent>
+            <Skeleton className="h-8 w-12 mb-2" />
+            <Skeleton className="h-3 w-24" />
+          </CardContent>
+        </Card>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-4">
+          <Card className="border border-border/60 bg-card/80">
+            <CardHeader className="pb-3">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-48" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-start gap-3 pb-3 border-b border-border/60 last:border-0">
+                  <Skeleton className="h-5 w-5 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-2 w-full" />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+          <Card className="border border-border/60 bg-card/80">
+            <CardHeader className="pb-3">
+              <Skeleton className="h-5 w-28" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-border/60">
+                  <Skeleton className="h-5 w-5 rounded-full" />
+                  <Skeleton className="h-4 flex-1" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+        <div className="space-y-4">
+          <Card className="border border-border/60 bg-card/80">
+            <CardHeader className="pb-3"><Skeleton className="h-4 w-24" /></CardHeader>
+            <CardContent><Skeleton className="h-4 w-full mb-2" /><Skeleton className="h-4 w-3/4" /></CardContent>
+          </Card>
+          <Card className="border border-border/60 bg-card/80 h-96">
+            <CardHeader><Skeleton className="h-4 w-24" /></CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-10 w-3/4" />
+              <Skeleton className="h-10 w-2/3 ml-auto" />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 
 
@@ -500,6 +576,18 @@ const FreelancerProjectDetailContent = () => {
     if (!activePhase) return [];
     return derivedTasks.filter(t => t.phase === activePhase.id);
   }, [derivedTasks, activePhase]);
+
+  // Show skeleton while loading
+  if (isLoading) {
+    return (
+      <RoleAwareSidebar>
+        <div className="mt-5 ml-5 mr-5">
+          <FreelancerTopBar label="Loading..." />
+        </div>
+        <ProjectDetailSkeleton />
+      </RoleAwareSidebar>
+    );
+  }
 
   return (
     <RoleAwareSidebar>

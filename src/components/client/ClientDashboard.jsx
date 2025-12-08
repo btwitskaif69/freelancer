@@ -38,126 +38,7 @@ import { listFreelancers } from "@/lib/api-client";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
-const dashboardTemplate = {
-  heroSubtitle: "Review proposals, unlock talent, and keep budgets on track.",
-  completion: 72,
-  metrics: [
-    {
-      label: "Active projects",
-      value: "6",
-      trend: "2 awaiting review",
-      icon: Briefcase,
-    },
-    {
-      label: "Completed projects",
-      value: "3",
-      trend: "1 onboarding",
-      icon: Sparkles,
-    },
-    {
-      label: "Proposals Sent",
-      value: "2",
-      trend: "Vendors are responsive",
-      icon: Clock,
-    },
-    {
-      label: "Total Spend",
-      value: "₹ 24",
-      trend: "Vendors are responsive",
-      icon: Banknote,
-    },
-  ],
-  pipelineTitle: "Hiring pipeline",
-  pipelineDescription: "Where decisions are pending",
-  pipeline: [
-    {
-      title: "Product launch video",
-      client: "Internal",
-      status: "Interviewing",
-      due: "Pick this week",
-    },
-    {
-      title: "Lifecycle email flows",
-      client: "Internal",
-      status: "Shortlist ready",
-      due: "Review today",
-    },
-    {
-      title: "Investor portal UI",
-      client: "Internal",
-      status: "Waiting on proposal",
-      due: "ETA tomorrow",
-    },
-  ],
-  availabilityTitle: "Budget allocation",
-  availabilityDescription: "Hours committed by phase",
-  availability: [
-    { label: "Discovery & scoping", progress: 65 },
-    { label: "Production", progress: 40 },
-    { label: "QA & rollout", progress: 25 },
-  ],
-  messagesTitle: "Vendor updates",
-  messagesDescription: "Latest freelancer communication",
-  messages: [
-    {
-      from: "Nova Design Lab",
-      company: "Vendor",
-      excerpt: "Shared the figma handoff and notes for review.",
-      time: "30m ago",
-    },
-    {
-      from: "Atlas Collective",
-      company: "Vendor",
-      excerpt: "Budget tweak approved - sending updated agreement.",
-      time: "2h ago",
-    },
-  ],
-  remindersTitle: "Approvals",
-  remindersDescription: "Actions to keep work moving",
-  reminders: [
-    { icon: Clock, title: "Approve Nova invoice", subtitle: "Due in 2 days" },
-    {
-      icon: Briefcase,
-      title: "Review Atlas contract",
-      subtitle: "Legal feedback ready",
-    },
-  ],
-};
-
-const recommendedFreelancers = [
-  {
-    name: "Nova Stack",
-    specialty: "Full-stack • Next.js, Node",
-    rating: "4.9",
-    projects: "48",
-    availability: "2 slots",
-    serviceMatch: "Development & Tech",
-  },
-  {
-    name: "Lumen Creative",
-    specialty: "UI/UX • Figma, Framer",
-    rating: "4.8",
-    projects: "36",
-    availability: "3 slots",
-    serviceMatch: "Creative & Design",
-  },
-  {
-    name: "Growth Loop",
-    specialty: "Performance Marketing • Meta/Google Ads",
-    rating: "4.7",
-    projects: "52",
-    availability: "1 slot",
-    serviceMatch: "Digital Marketing",
-  },
-  {
-    name: "Opsline",
-    specialty: "DevOps • AWS, CI/CD",
-    rating: "4.9",
-    projects: "41",
-    availability: "2 slots",
-    serviceMatch: "Development & Tech",
-  },
-];
+// No static fallback data - all metrics loaded from API
 
 const SAVED_PROPOSAL_STORAGE_KEYS = [
   "markify:savedProposal",
@@ -214,11 +95,8 @@ const clearSavedProposalFromStorage = () => {
   SAVED_PROPOSAL_STORAGE_KEYS.forEach((storageKey) => {
     window.localStorage.removeItem(storageKey);
   });
-  // keep drafts (markify:pendingProposal) intact so they remain available on drafts page
   window.localStorage.removeItem("markify:savedProposalSynced");
 };
-
-const templateMetrics = dashboardTemplate.metrics || [];
 
 const FreelancerCard = ({ freelancer, onSend, canSend }) => {
   return (
@@ -373,9 +251,9 @@ const ClientDashboardContent = () => {
   const { authFetch } = useAuth();
   const [notificationsChecked, setNotificationsChecked] = useState(false);
   const [projects, setProjects] = useState([]);
-  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
-  const heroSubtitle = dashboardTemplate.heroSubtitle;
-  const [metrics, setMetrics] = useState(templateMetrics);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const heroSubtitle = "Review proposals, unlock talent, and keep budgets on track.";
+  const [metrics, setMetrics] = useState([]);
 
   useEffect(() => {
     const session = getSession();
@@ -443,14 +321,15 @@ const ClientDashboardContent = () => {
         ]);
       } catch (error) {
         console.error("Failed to load projects", error);
-        setMetrics(templateMetrics);
+        // Set empty metrics on error - no fallback to static data
+        setMetrics([]);
       } finally {
         setIsLoadingProjects(false);
       }
     };
 
     loadProjects();
-  }, [authFetch, templateMetrics]);
+  }, [authFetch]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -607,15 +486,16 @@ const ClientDashboardContent = () => {
   const hasSavedProposal = Boolean(savedProposalDetails);
 
   const matchingFreelancers = useMemo(() => {
-    const source = freelancers.length ? freelancers : recommendedFreelancers;
-    if (!savedProposalDetails?.service) return source;
+    // Use only API-loaded freelancers, no static fallback
+    if (!freelancers.length) return [];
+    if (!savedProposalDetails?.service) return freelancers;
     const term = savedProposalDetails.service.toLowerCase();
-    const filtered = source.filter((f) => {
+    const filtered = freelancers.filter((f) => {
       const specialty = f.specialty?.toLowerCase() || "";
       const match = f.serviceMatch?.toLowerCase() || "";
       return match.includes(term) || specialty.includes(term);
     });
-    return filtered.length ? filtered : source;
+    return filtered.length ? filtered : freelancers;
   }, [savedProposalDetails, freelancers]);
 
   const sendProposalToFreelancer = async (freelancer) => {
@@ -885,25 +765,46 @@ const ClientDashboardContent = () => {
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {metrics.map((metric) => {
-            const Icon = metric.icon;
-            return (
-              <Card key={metric.label} className="border-dashed">
+          {isLoadingProjects ? (
+            // Skeleton loading for metrics
+            [1, 2, 3, 4].map((i) => (
+              <Card key={i} className="border-dashed">
                 <CardHeader className="flex-row items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Icon className="size-4 text-primary" />
-                    {metric.label}
-                  </CardTitle>
+                  <Skeleton className="h-5 w-32" />
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  <p className="text-3xl font-semibold">{metric.value}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {metric.trend}
-                  </p>
+                  <Skeleton className="h-8 w-20" />
+                  <Skeleton className="h-4 w-24" />
                 </CardContent>
               </Card>
-            );
-          })}
+            ))
+          ) : metrics.length > 0 ? (
+            metrics.map((metric) => {
+              const Icon = metric.icon;
+              return (
+                <Card key={metric.label} className="border-dashed">
+                  <CardHeader className="flex-row items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Icon className="size-4 text-primary" />
+                      {metric.label}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <p className="text-3xl font-semibold">{metric.value}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {metric.trend}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })
+          ) : (
+            <Card className="col-span-4 border-dashed">
+              <CardContent className="p-6 text-center text-muted-foreground">
+                No project data available. Create a project to see your metrics.
+              </CardContent>
+            </Card>
+          )}
         </section>
 
         <section className="grid gap-6">
@@ -1078,35 +979,35 @@ const ClientDashboardContent = () => {
             </DialogHeader>
             <div className="p-1">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {(matchingFreelancers.length
-                ? matchingFreelancers
-                : recommendedFreelancers
-              ).map((freelancer, idx) => {
-                const canSend = Boolean(freelancer.id);
-                // Ensure skills array exists for the card
-                const enrichedFreelancer = {
-                    ...freelancer,
-                    skills: Array.isArray(freelancer.skills) ? freelancer.skills : (freelancer.specialty ? freelancer.specialty.split("•").map(s => s.trim()) : []),
-                    bio: freelancer.bio || "Professional freelancer ready to work."
-                };
-                
-                return (
-                  <FreelancerCard 
-                    key={`${freelancer.name}-${idx}`} 
-                    freelancer={enrichedFreelancer} 
-                    onSend={requestSendToFreelancer}
-                    canSend={canSend}
-                  />
-                );
-              })}
-              </div>
-              {freelancersLoading && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                  {[1, 2, 3].map((i) => (
-                    <FreelancerCardSkeleton key={i} />
-                  ))}
+              {freelancersLoading ? (
+                // Show skeletons while loading
+                [1, 2, 3].map((i) => (
+                  <FreelancerCardSkeleton key={i} />
+                ))
+              ) : (matchingFreelancers.length || freelancers.length) ? (
+                (matchingFreelancers.length ? matchingFreelancers : freelancers).map((freelancer, idx) => {
+                  const canSend = Boolean(freelancer.id);
+                  const enrichedFreelancer = {
+                      ...freelancer,
+                      skills: Array.isArray(freelancer.skills) ? freelancer.skills : (freelancer.specialty ? freelancer.specialty.split("•").map(s => s.trim()) : []),
+                      bio: freelancer.bio || "Professional freelancer ready to work."
+                  };
+                  
+                  return (
+                    <FreelancerCard 
+                      key={`${freelancer.name}-${idx}`} 
+                      freelancer={enrichedFreelancer} 
+                      onSend={requestSendToFreelancer}
+                      canSend={canSend}
+                    />
+                  );
+                })
+              ) : (
+                <div className="col-span-3 text-center py-8 text-muted-foreground">
+                  No freelancers available. Please try again later.
                 </div>
               )}
+              </div>
               {!matchingFreelancers.length && !freelancersLoading && (
                 <p className="text-sm text-muted-foreground mt-4 text-center">
                   Showing recommended freelancers across all services.

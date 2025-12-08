@@ -11,6 +11,35 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FreelancerTopBar } from "@/components/freelancer/FreelancerTopBar";
 import { useAuth } from "@/context/AuthContext";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Skeleton for project cards while loading
+const ProjectCardSkeleton = () => (
+  <Card className="border border-border/60 bg-card/80">
+    <CardContent className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-6 w-20 rounded-full" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+      </div>
+      <div className="flex gap-4">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-4 w-24" />
+      </div>
+      <div className="space-y-2">
+        <div className="flex justify-between">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-10" />
+        </div>
+        <Skeleton className="h-2 w-full" />
+      </div>
+      <Skeleton className="h-10 w-full" />
+    </CardContent>
+  </Card>
+);
 
 const statusConfig = {
   "in-progress": {
@@ -149,11 +178,13 @@ const ProjectCard = ({ project }) => {
 const FreelancerProjectsContent = () => {
   const { authFetch, isAuthenticated } = useAuth();
   const [projects, setProjects] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!isAuthenticated) return;
 
     const fetchProjects = async () => {
+      setIsLoading(true);
       try {
         const response = await authFetch("/proposals");
         const payload = await response.json().catch(() => null);
@@ -197,6 +228,8 @@ const FreelancerProjectsContent = () => {
         setProjects(Array.from(uniqueProjects.values()));
       } catch (error) {
         console.error("Failed to load projects from API:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -224,7 +257,9 @@ const FreelancerProjectsContent = () => {
       </header>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {projects.length ? (
+        {isLoading ? (
+          [1, 2, 3].map((i) => <ProjectCardSkeleton key={i} />)
+        ) : projects.length ? (
           projects.map((project) => <ProjectCard key={project.id} project={project} />)
         ) : (
           <div className="col-span-full rounded-xl border border-dashed border-border/60 bg-card/40 px-4 py-6 text-sm text-muted-foreground">

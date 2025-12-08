@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock, FileText, MoreVertical, XCircle } from "lucide-react";
 import { RoleAwareSidebar } from "@/components/dashboard/RoleAwareSidebar";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FreelancerTopBar } from "@/components/freelancer/FreelancerTopBar";
@@ -257,13 +258,48 @@ const ProposalCard = ({ proposal, onStatusChange, onOpen }) => {
   );
 };
 
-const Section = ({ title, items, onStatusChange, onOpenProposal, empty }) => (
+// Skeleton for proposal cards while loading
+const ProposalCardSkeleton = () => (
+  <Card className="overflow-hidden border border-border/50 bg-card/70 shadow-sm">
+    <CardContent className="p-5 lg:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-6">
+        <Skeleton className="h-16 w-16 rounded-2xl" />
+        <div className="flex-1 min-w-0 space-y-3">
+          <div className="flex gap-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-5 w-20 rounded-full" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1">
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+            <div className="space-y-1">
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-16" />
+          <Skeleton className="h-8 w-24" />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+const Section = ({ title, items, onStatusChange, onOpenProposal, empty, isLoading }) => (
   <div className="space-y-3">
     <div className="flex items-center justify-between">
       <h2 className="text-lg font-semibold">{title}</h2>
-      <Badge variant="outline">{items.length}</Badge>
+      <Badge variant="outline">{isLoading ? '-' : items.length}</Badge>
     </div>
-    {items.length === 0 ? (
+    {isLoading ? (
+      <div className="space-y-3">
+        {[1, 2].map((i) => <ProposalCardSkeleton key={i} />)}
+      </div>
+    ) : items.length === 0 ? (
       <div className="rounded-xl border border-dashed border-border/60 bg-card/40 px-4 py-6 text-sm text-muted-foreground">
         {empty}
       </div>
@@ -326,6 +362,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
   const [proposals, setProposals] = useState([]);
   const [selectedProposal, setSelectedProposal] = useState(null);
   const [isLoadingProposal, setIsLoadingProposal] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const syncClientLocalCache = (proposalId, status) => {
     if (typeof window === "undefined" || !proposalId) return;
@@ -347,9 +384,13 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
   };
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      setIsLoading(false);
+      return;
+    }
 
     const fetchProposals = async () => {
+      setIsLoading(true);
       try {
         const response = await authFetch("/proposals");
         const payload = await response.json().catch(() => null);
@@ -357,6 +398,8 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
         setProposals(remote.map(mapApiProposal));
       } catch (error) {
         console.error("Failed to load freelancer proposals from API:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -475,6 +518,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             onStatusChange={handleStatusChange}
             onOpenProposal={handleOpenProposal}
             empty="No pending proposals right now."
+            isLoading={isLoading}
           />
         )}
         {sectionsToRender.includes("received") && (
@@ -484,6 +528,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             onStatusChange={handleStatusChange}
             onOpenProposal={handleOpenProposal}
             empty="Nothing has been marked received yet."
+            isLoading={isLoading}
           />
         )}
         {sectionsToRender.includes("accepted") && (
@@ -493,6 +538,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             onStatusChange={handleStatusChange}
             onOpenProposal={handleOpenProposal}
             empty="Accepted proposals will appear here."
+            isLoading={isLoading}
           />
         )}
         {sectionsToRender.includes("rejected") && (
@@ -502,6 +548,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             onStatusChange={handleStatusChange}
             onOpenProposal={handleOpenProposal}
             empty="Rejected items will show here."
+            isLoading={isLoading}
           />
         )}
       </div>

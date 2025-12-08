@@ -38,126 +38,7 @@ import { listFreelancers } from "@/lib/api-client";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
-const dashboardTemplate = {
-  heroSubtitle: "Review proposals, unlock talent, and keep budgets on track.",
-  completion: 72,
-  metrics: [
-    {
-      label: "Active projects",
-      value: "6",
-      trend: "2 awaiting review",
-      icon: Briefcase,
-    },
-    {
-      label: "Completed projects",
-      value: "3",
-      trend: "1 onboarding",
-      icon: Sparkles,
-    },
-    {
-      label: "Proposals Sent",
-      value: "2",
-      trend: "Vendors are responsive",
-      icon: Clock,
-    },
-    {
-      label: "Total Spend",
-      value: "₹ 24",
-      trend: "Vendors are responsive",
-      icon: Banknote,
-    },
-  ],
-  pipelineTitle: "Hiring pipeline",
-  pipelineDescription: "Where decisions are pending",
-  pipeline: [
-    {
-      title: "Product launch video",
-      client: "Internal",
-      status: "Interviewing",
-      due: "Pick this week",
-    },
-    {
-      title: "Lifecycle email flows",
-      client: "Internal",
-      status: "Shortlist ready",
-      due: "Review today",
-    },
-    {
-      title: "Investor portal UI",
-      client: "Internal",
-      status: "Waiting on proposal",
-      due: "ETA tomorrow",
-    },
-  ],
-  availabilityTitle: "Budget allocation",
-  availabilityDescription: "Hours committed by phase",
-  availability: [
-    { label: "Discovery & scoping", progress: 65 },
-    { label: "Production", progress: 40 },
-    { label: "QA & rollout", progress: 25 },
-  ],
-  messagesTitle: "Vendor updates",
-  messagesDescription: "Latest freelancer communication",
-  messages: [
-    {
-      from: "Nova Design Lab",
-      company: "Vendor",
-      excerpt: "Shared the figma handoff and notes for review.",
-      time: "30m ago",
-    },
-    {
-      from: "Atlas Collective",
-      company: "Vendor",
-      excerpt: "Budget tweak approved - sending updated agreement.",
-      time: "2h ago",
-    },
-  ],
-  remindersTitle: "Approvals",
-  remindersDescription: "Actions to keep work moving",
-  reminders: [
-    { icon: Clock, title: "Approve Nova invoice", subtitle: "Due in 2 days" },
-    {
-      icon: Briefcase,
-      title: "Review Atlas contract",
-      subtitle: "Legal feedback ready",
-    },
-  ],
-};
-
-const recommendedFreelancers = [
-  {
-    name: "Nova Stack",
-    specialty: "Full-stack • Next.js, Node",
-    rating: "4.9",
-    projects: "48",
-    availability: "2 slots",
-    serviceMatch: "Development & Tech",
-  },
-  {
-    name: "Lumen Creative",
-    specialty: "UI/UX • Figma, Framer",
-    rating: "4.8",
-    projects: "36",
-    availability: "3 slots",
-    serviceMatch: "Creative & Design",
-  },
-  {
-    name: "Growth Loop",
-    specialty: "Performance Marketing • Meta/Google Ads",
-    rating: "4.7",
-    projects: "52",
-    availability: "1 slot",
-    serviceMatch: "Digital Marketing",
-  },
-  {
-    name: "Opsline",
-    specialty: "DevOps • AWS, CI/CD",
-    rating: "4.9",
-    projects: "41",
-    availability: "2 slots",
-    serviceMatch: "Development & Tech",
-  },
-];
+// No static fallback data - all metrics loaded from API
 
 const SAVED_PROPOSAL_STORAGE_KEYS = [
   "markify:savedProposal",
@@ -176,9 +57,14 @@ const loadSavedProposalFromStorage = () => {
     const rawValue = window.localStorage.getItem(storageKey);
     if (!rawValue) continue;
     try {
-      return JSON.parse(rawValue);
+      const parsed = JSON.parse(rawValue);
+      // Only return if explicitly saved (has savedAt or isSavedDraft flag)
+      if (parsed.savedAt || parsed.isSavedDraft) {
+        return parsed;
+      }
     } catch {
-      return { content: rawValue };
+      // If can't parse, skip (not a valid saved proposal)
+      continue;
     }
   }
 
@@ -214,13 +100,10 @@ const clearSavedProposalFromStorage = () => {
   SAVED_PROPOSAL_STORAGE_KEYS.forEach((storageKey) => {
     window.localStorage.removeItem(storageKey);
   });
-  // keep drafts (markify:pendingProposal) intact so they remain available on drafts page
   window.localStorage.removeItem("markify:savedProposalSynced");
 };
 
-const templateMetrics = dashboardTemplate.metrics || [];
-
-const FreelancerCard = ({ freelancer, onSend, canSend }) => {
+const FreelancerCard = ({ freelancer, onSend, canSend, onViewProfile }) => {
   return (
     <Card className="group w-full hover:shadow-xl hover:border-primary/20 flex flex-col h-full overflow-hidden bg-card transition-all duration-300">
       {/* Header Section */}
@@ -310,7 +193,11 @@ const FreelancerCard = ({ freelancer, onSend, canSend }) => {
       <div className="px-6 pb-6 mt-auto">
          <div className="h-px w-full bg-border/50 my-4"></div>
          <div className="grid grid-cols-2 gap-3">
-            <Button variant="outline" className="w-full font-semibold">
+            <Button 
+              variant="outline" 
+              className="w-full font-semibold"
+              onClick={() => onViewProfile?.(freelancer)}
+            >
               View Profile
             </Button>
             <Button 
@@ -358,6 +245,204 @@ const FreelancerCardSkeleton = () => (
   </Card>
 );
 
+// Freelancer Profile Dialog - shows full profile details with premium design
+const FreelancerProfileDialog = ({ freelancer, isOpen, onClose }) => {
+  if (!freelancer) return null;
+  
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto p-0 border-0 bg-gradient-to-b from-card via-card to-background shadow-2xl">
+        {/* Animated Header with glassmorphism */}
+        <div className="relative overflow-hidden">
+          {/* Background gradient animation */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/30 via-purple-500/20 to-pink-500/10" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent" />
+          
+          {/* Decorative circles */}
+          <div className="absolute -top-20 -right-20 w-64 h-64 bg-primary/10 rounded-full blur-3xl" />
+          <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl" />
+          
+          <div className="relative p-8 pb-20">
+            {/* Close button */}
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 rounded-full p-2 bg-background/50 backdrop-blur-sm border border-border/50 hover:bg-background/80 hover:scale-110 transition-all duration-200 z-10"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            
+            {/* Profile header */}
+            <div className="flex items-start gap-5">
+              {/* Avatar with glow effect */}
+              <div className="relative group">
+                <div className="absolute inset-0 bg-primary/50 rounded-full blur-xl opacity-50 group-hover:opacity-75 transition-opacity" />
+                <div className="relative flex h-28 w-28 shrink-0 overflow-hidden rounded-full border-4 border-background shadow-2xl ring-2 ring-primary/40 group-hover:ring-primary/60 transition-all duration-300">
+                  {freelancer.avatar ? (
+                    <img
+                      className="aspect-square h-full w-full object-cover transform group-hover:scale-110 transition-transform duration-500"
+                      src={freelancer.avatar}
+                      alt={freelancer.name}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/40 text-primary font-bold text-3xl">
+                      {freelancer.name?.charAt(0) || "F"}
+                    </div>
+                  )}
+                </div>
+                {/* Online indicator */}
+                <div className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-500 rounded-full border-4 border-background shadow-lg" />
+              </div>
+              
+              {/* Name and info */}
+              <div className="flex-1 min-w-0 pt-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-2xl font-bold text-foreground truncate">
+                    {freelancer.name}
+                  </h2>
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30">
+                    <CheckCircle className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">Verified</span>
+                  </div>
+                </div>
+                <p className="text-muted-foreground flex items-center gap-2 mt-2 text-sm">
+                  <Briefcase className="w-4 h-4 text-primary/70" />
+                  <span className="font-medium">{freelancer.specialty || "Freelancer"}</span>
+                </p>
+                {freelancer.availability && (
+                  <p className="text-sm text-muted-foreground/70 flex items-center gap-2 mt-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    {freelancer.availability}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Floating Stats Card */}
+        <div className="flex justify-center -mt-12 px-6 relative z-10">
+          <div className="flex items-center bg-card/95 backdrop-blur-xl border border-border/60 rounded-2xl shadow-xl overflow-hidden">
+            {/* Rating */}
+            <div className="flex flex-col items-center px-6 py-4 hover:bg-muted/30 transition-colors">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-2xl text-foreground">{freelancer.rating || "4.7"}</span>
+                <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
+              </div>
+              <span className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground mt-1">Rating</span>
+            </div>
+            
+            <div className="w-px h-12 bg-gradient-to-b from-transparent via-border to-transparent" />
+            
+            {/* Projects */}
+            <div className="flex flex-col items-center px-6 py-4 hover:bg-muted/30 transition-colors">
+              <span className="font-bold text-2xl text-foreground">{freelancer.projects || "4+"}</span>
+              <span className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground mt-1">Projects</span>
+            </div>
+            
+            <div className="w-px h-12 bg-gradient-to-b from-transparent via-border to-transparent" />
+            
+            {/* Success Rate */}
+            <div className="flex flex-col items-center px-6 py-4 hover:bg-muted/30 transition-colors">
+              <span className="font-bold text-2xl text-emerald-500">{freelancer.successRate || "98%"}</span>
+              <span className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground mt-1">Success</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Content Sections */}
+        <div className="p-6 pt-8 space-y-6">
+          {/* About Section */}
+          <div className="space-y-3 p-5 rounded-2xl bg-gradient-to-br from-muted/30 to-muted/10 border border-border/40">
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Zap className="w-3.5 h-3.5 text-primary" />
+              </div>
+              About
+            </h3>
+            <p className="text-foreground/90 leading-relaxed text-[15px]">
+              {freelancer.bio || `Experienced ${freelancer.specialty || "freelancer"} professional with a passion for delivering high-quality work. Ready to help bring your project to life with expertise and dedication.`}
+            </p>
+          </div>
+
+          {/* Skills Section */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground px-1">Skills</h3>
+            <div className="flex flex-wrap gap-2">
+              {(freelancer.skills?.length ? freelancer.skills : freelancer.specialty?.split(",") || ["Freelancer"]).map((skill, idx) => (
+                <Badge 
+                  key={idx} 
+                  variant="secondary"
+                  className="px-4 py-1.5 text-sm font-medium bg-primary/5 border border-primary/20 text-foreground hover:bg-primary/10 hover:border-primary/40 hover:scale-105 transition-all duration-200 cursor-default"
+                >
+                  {typeof skill === 'string' ? skill.trim() : skill}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          {/* Info Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Hourly Rate */}
+            {freelancer.hourlyRate && (
+              <div className="group p-4 rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40 transition-all duration-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Banknote className="w-4 h-4 text-emerald-500" />
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Hourly Rate</h3>
+                </div>
+                <p className="text-2xl font-bold text-emerald-500">
+                  ₹{freelancer.hourlyRate}<span className="text-sm font-normal text-muted-foreground">/hr</span>
+                </p>
+              </div>
+            )}
+
+            {/* Member Since */}
+            {freelancer.memberSince && (
+              <div className="group p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20 hover:border-blue-500/40 transition-all duration-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="w-4 h-4 text-blue-500" />
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Member Since</h3>
+                </div>
+                <p className="text-xl font-bold text-foreground">
+                  {freelancer.memberSince}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Contact Section */}
+          {freelancer.email && (
+            <div className="p-4 rounded-xl bg-muted/20 border border-border/40 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Contact Email</h3>
+                  <p className="text-foreground font-medium">{freelancer.email}</p>
+                </div>
+              </div>
+              <Button size="sm" variant="ghost" className="text-primary hover:text-primary hover:bg-primary/10">
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="p-6 pt-2 flex gap-3 border-t border-border/40 bg-gradient-to-t from-muted/20 to-transparent">
+          <Button variant="outline" className="flex-1 h-12 font-semibold" onClick={onClose}>
+            Close
+          </Button>
+          <Button className="flex-1 h-12 gap-2 font-semibold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20">
+            <Send className="w-4 h-4" />
+            Send Proposal
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 const ClientDashboardContent = () => {
   const [sessionUser, setSessionUser] = useState(null);
   const [savedProposal, setSavedProposal] = useState(null);
@@ -373,9 +458,14 @@ const ClientDashboardContent = () => {
   const { authFetch } = useAuth();
   const [notificationsChecked, setNotificationsChecked] = useState(false);
   const [projects, setProjects] = useState([]);
-  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
-  const heroSubtitle = dashboardTemplate.heroSubtitle;
-  const [metrics, setMetrics] = useState(templateMetrics);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const heroSubtitle = "Review proposals, unlock talent, and keep budgets on track.";
+  const [metrics, setMetrics] = useState([]);
+  const [viewProfileFreelancer, setViewProfileFreelancer] = useState(null);
+
+  const handleViewProfile = (freelancer) => {
+    setViewProfileFreelancer(freelancer);
+  };
 
   useEffect(() => {
     const session = getSession();
@@ -408,10 +498,21 @@ const ClientDashboardContent = () => {
           (acc, project) => acc + (project.proposals?.length || 0),
           0
         );
-        const totalSpend = list.reduce(
-          (acc, project) => acc + (project.budget || 0),
-          0
+        const inProgress = list.filter(
+          (p) => ["IN_PROGRESS", "OPEN"].includes((p.status || "").toUpperCase())
         );
+        
+        // Total spend from projects with accepted proposals (shown in Project Tracker)
+        const projectsWithAccepted = list.filter((p) => {
+          const hasAccepted = (p.proposals || []).some(
+            (pr) => (pr.status || "").toUpperCase() === "ACCEPTED"
+          );
+          return hasAccepted;
+        });
+        const totalSpend = projectsWithAccepted.reduce((acc, project) => {
+          const budget = parseInt(project.budget) || 0;
+          return acc + budget;
+        }, 0);
 
         setMetrics([
           {
@@ -423,7 +524,7 @@ const ClientDashboardContent = () => {
           {
             label: "Completed projects",
             value: String(completed.length),
-            trend: `${Math.max(list.length - completed.length, 0)} in progress`,
+            trend: `${inProgress.length} in progress`,
             icon: Sparkles,
           },
           {
@@ -437,20 +538,21 @@ const ClientDashboardContent = () => {
           {
             label: "Total Spend",
             value: totalSpend ? `₹${totalSpend.toLocaleString()}` : "₹0",
-            trend: proposalsSent ? "Vendors are responsive" : "No spend yet",
+            trend: projectsWithAccepted.length ? `From ${projectsWithAccepted.length} active` : "No active projects",
             icon: Banknote,
           },
         ]);
       } catch (error) {
         console.error("Failed to load projects", error);
-        setMetrics(templateMetrics);
+        // Set empty metrics on error - no fallback to static data
+        setMetrics([]);
       } finally {
         setIsLoadingProjects(false);
       }
     };
 
     loadProjects();
-  }, [authFetch, templateMetrics]);
+  }, [authFetch]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -607,15 +709,16 @@ const ClientDashboardContent = () => {
   const hasSavedProposal = Boolean(savedProposalDetails);
 
   const matchingFreelancers = useMemo(() => {
-    const source = freelancers.length ? freelancers : recommendedFreelancers;
-    if (!savedProposalDetails?.service) return source;
+    // Use only API-loaded freelancers, no static fallback
+    if (!freelancers.length) return [];
+    if (!savedProposalDetails?.service) return freelancers;
     const term = savedProposalDetails.service.toLowerCase();
-    const filtered = source.filter((f) => {
+    const filtered = freelancers.filter((f) => {
       const specialty = f.specialty?.toLowerCase() || "";
       const match = f.serviceMatch?.toLowerCase() || "";
       return match.includes(term) || specialty.includes(term);
     });
-    return filtered.length ? filtered : source;
+    return filtered.length ? filtered : freelancers;
   }, [savedProposalDetails, freelancers]);
 
   const sendProposalToFreelancer = async (freelancer) => {
@@ -779,23 +882,38 @@ const ClientDashboardContent = () => {
         const data = await listFreelancers();
         const normalized = Array.isArray(data)
           ? data.map((f) => {
-              const skillsText =
-                Array.isArray(f.skills) && f.skills.length
-                  ? f.skills.join(", ")
-                  : f.bio || "Freelancer";
+              const skillsArray = Array.isArray(f.skills) ? f.skills : [];
+              const skillsText = skillsArray.length
+                ? skillsArray.join(", ")
+                : f.bio || "Freelancer";
               return {
+                // Core identifying fields from backend
                 id: f.id,
+                email: f.email,
                 name: f.fullName || f.name || "Freelancer",
+                fullName: f.fullName,
+                
+                // Profile details from backend
+                bio: f.bio || "",
+                skills: skillsArray,
                 specialty: skillsText,
+                hourlyRate: f.hourlyRate || null,
+                
+                // Display fields (derived or fallback)
                 rating: f.rating || "4.7",
-                projects: f.projects || "4+",
+                projects: f.projectsCount || f.projects || "4+",
+                successRate: f.successRate || "98%",
                 availability:
                   f.availability ||
                   (f.hourlyRate ? `₹${f.hourlyRate}/hr` : "Available"),
                 serviceMatch: skillsText || "Freelancer",
                 avatar:
                   f.avatar ||
-                  "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=256&q=80",
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(f.fullName || "Freelancer")}&background=random&size=256`,
+                
+                // Dates
+                createdAt: f.createdAt,
+                memberSince: f.createdAt ? new Date(f.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : null,
               };
             })
           : [];
@@ -885,25 +1003,46 @@ const ClientDashboardContent = () => {
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {metrics.map((metric) => {
-            const Icon = metric.icon;
-            return (
-              <Card key={metric.label} className="border-dashed">
+          {isLoadingProjects ? (
+            // Skeleton loading for metrics
+            [1, 2, 3, 4].map((i) => (
+              <Card key={i} className="border-dashed">
                 <CardHeader className="flex-row items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Icon className="size-4 text-primary" />
-                    {metric.label}
-                  </CardTitle>
+                  <Skeleton className="h-5 w-32" />
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  <p className="text-3xl font-semibold">{metric.value}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {metric.trend}
-                  </p>
+                  <Skeleton className="h-8 w-20" />
+                  <Skeleton className="h-4 w-24" />
                 </CardContent>
               </Card>
-            );
-          })}
+            ))
+          ) : metrics.length > 0 ? (
+            metrics.map((metric) => {
+              const Icon = metric.icon;
+              return (
+                <Card key={metric.label} className="border-dashed">
+                  <CardHeader className="flex-row items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Icon className="size-4 text-primary" />
+                      {metric.label}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <p className="text-3xl font-semibold">{metric.value}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {metric.trend}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })
+          ) : (
+            <Card className="col-span-4 border-dashed">
+              <CardContent className="p-6 text-center text-muted-foreground">
+                No project data available. Create a project to see your metrics.
+              </CardContent>
+            </Card>
+          )}
         </section>
 
         <section className="grid gap-6">
@@ -1078,35 +1217,36 @@ const ClientDashboardContent = () => {
             </DialogHeader>
             <div className="p-1">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {(matchingFreelancers.length
-                ? matchingFreelancers
-                : recommendedFreelancers
-              ).map((freelancer, idx) => {
-                const canSend = Boolean(freelancer.id);
-                // Ensure skills array exists for the card
-                const enrichedFreelancer = {
-                    ...freelancer,
-                    skills: Array.isArray(freelancer.skills) ? freelancer.skills : (freelancer.specialty ? freelancer.specialty.split("•").map(s => s.trim()) : []),
-                    bio: freelancer.bio || "Professional freelancer ready to work."
-                };
-                
-                return (
-                  <FreelancerCard 
-                    key={`${freelancer.name}-${idx}`} 
-                    freelancer={enrichedFreelancer} 
-                    onSend={requestSendToFreelancer}
-                    canSend={canSend}
-                  />
-                );
-              })}
-              </div>
-              {freelancersLoading && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                  {[1, 2, 3].map((i) => (
-                    <FreelancerCardSkeleton key={i} />
-                  ))}
+              {freelancersLoading ? (
+                // Show skeletons while loading
+                [1, 2, 3].map((i) => (
+                  <FreelancerCardSkeleton key={i} />
+                ))
+              ) : (matchingFreelancers.length || freelancers.length) ? (
+                (matchingFreelancers.length ? matchingFreelancers : freelancers).map((freelancer, idx) => {
+                  const canSend = Boolean(freelancer.id);
+                  const enrichedFreelancer = {
+                      ...freelancer,
+                      skills: Array.isArray(freelancer.skills) ? freelancer.skills : (freelancer.specialty ? freelancer.specialty.split("•").map(s => s.trim()) : []),
+                      bio: freelancer.bio || "Professional freelancer ready to work."
+                  };
+                  
+                  return (
+                    <FreelancerCard 
+                      key={`${freelancer.name}-${idx}`} 
+                      freelancer={enrichedFreelancer} 
+                      onSend={requestSendToFreelancer}
+                      canSend={canSend}
+                      onViewProfile={handleViewProfile}
+                    />
+                  );
+                })
+              ) : (
+                <div className="col-span-3 text-center py-8 text-muted-foreground">
+                  No freelancers available. Please try again later.
                 </div>
               )}
+              </div>
               {!matchingFreelancers.length && !freelancersLoading && (
                 <p className="text-sm text-muted-foreground mt-4 text-center">
                   Showing recommended freelancers across all services.
@@ -1169,6 +1309,13 @@ const ClientDashboardContent = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Freelancer Profile Popup */}
+        <FreelancerProfileDialog
+          freelancer={viewProfileFreelancer}
+          isOpen={Boolean(viewProfileFreelancer)}
+          onClose={() => setViewProfileFreelancer(null)}
+        />
       </div>
     </>
   );

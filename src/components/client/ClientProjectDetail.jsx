@@ -18,6 +18,124 @@ import { RoleAwareSidebar } from "@/components/dashboard/RoleAwareSidebar";
 import { ClientTopBar } from "@/components/client/ClientTopBar";
 import { SOP_TEMPLATES } from "@/data/sopTemplates";
 import { useAuth } from "@/context/AuthContext";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Skeleton Loading Component
+const ProjectDetailSkeleton = () => (
+  <div className="min-h-screen bg-background text-foreground p-6 md:p-8 w-full">
+    <div className="w-full max-w-full mx-auto space-y-6">
+      {/* Header Skeleton */}
+      <div className="space-y-2">
+        <Skeleton className="h-9 w-64" />
+        <Skeleton className="h-4 w-96" />
+      </div>
+
+      {/* Stats Cards Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="border border-border/60 bg-card/80">
+          <CardHeader className="pb-2">
+            <Skeleton className="h-4 w-24" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-8 w-16 mb-3" />
+            <Skeleton className="h-2 w-full" />
+          </CardContent>
+        </Card>
+        <Card className="border border-border/60 bg-card/80">
+          <CardHeader className="pb-2">
+            <Skeleton className="h-4 w-32" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-8 w-12 mb-2" />
+            <Skeleton className="h-3 w-24" />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Content Skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-4">
+          {/* Phases Card Skeleton */}
+          <Card className="border border-border/60 bg-card/80">
+            <CardHeader className="pb-3">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-48" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-start gap-3 pb-3 border-b border-border/60 last:border-0">
+                  <Skeleton className="h-5 w-5 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-2 w-full" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Tasks Card Skeleton */}
+          <Card className="border border-border/60 bg-card/80">
+            <CardHeader className="pb-3">
+              <Skeleton className="h-5 w-28" />
+              <Skeleton className="h-4 w-36" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-border/60">
+                  <Skeleton className="h-5 w-5 rounded-full" />
+                  <Skeleton className="h-4 flex-1" />
+                  <Skeleton className="h-7 w-16 rounded" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sidebar Skeleton */}
+        <div className="space-y-4">
+          <Card className="border border-border/60 bg-card/80">
+            <CardHeader className="pb-3">
+              <Skeleton className="h-4 w-24" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-4 w-full mb-2" />
+              <Skeleton className="h-4 w-3/4" />
+            </CardContent>
+          </Card>
+          <Card className="border border-border/60 bg-card/80">
+            <CardHeader className="pb-3">
+              <Skeleton className="h-4 w-32" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+            </CardContent>
+          </Card>
+          <Card className="border border-border/60 bg-card/80 h-96">
+            <CardHeader>
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-3 w-40" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-10 w-3/4" />
+              <Skeleton className="h-10 w-2/3 ml-auto" />
+              <Skeleton className="h-10 w-3/4" />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 const initialMessages = [];
 
@@ -55,6 +173,8 @@ const ProjectDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
+  const [completedTaskIds, setCompletedTaskIds] = useState(new Set());
+  const [verifiedTaskIds, setVerifiedTaskIds] = useState(new Set());
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -73,6 +193,13 @@ const ProjectDashboard = () => {
 
         if (active && data) {
           setProject(data);
+          // Load saved task progress from database
+          if (Array.isArray(data.completedTasks)) {
+            setCompletedTaskIds(new Set(data.completedTasks));
+          }
+          if (Array.isArray(data.verifiedTasks)) {
+            setVerifiedTaskIds(new Set(data.verifiedTasks));
+          }
         }
       } catch (error) {
         console.error("Failed to load project detail:", error);
@@ -89,7 +216,7 @@ const ProjectDashboard = () => {
     };
   }, [authFetch, isAuthenticated, projectId]);
 
-  const updateProjectProgress = async (newProgress) => {
+  const updateProjectProgress = async (newProgress, completedArr, verifiedArr) => {
     if (!project?.id) return;
     
     // Optimistic update
@@ -99,11 +226,14 @@ const ProjectDashboard = () => {
         await authFetch(`/projects/${project.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ progress: newProgress })
+            body: JSON.stringify({ 
+              progress: newProgress,
+              completedTasks: completedArr,
+              verifiedTasks: verifiedArr
+            })
         });
     } catch (error) {
         console.error("Failed to update project progress:", error);
-        // Revert on failure (optional, needs refetch or prev state storage)
     }
   };
 
@@ -272,13 +402,13 @@ const ProjectDashboard = () => {
 
   // ... (SOP and Progress logic remains same) ...
 
-  // Budget
+  // Budget - use actual project budget, default to 0 if not set
   const totalBudget = useMemo(() => {
     if (project?.budget !== undefined && project?.budget !== null) {
       const value = Number(project.budget);
       if (Number.isFinite(value)) return Math.max(0, value);
     }
-    return 50000;
+    return 0;
   }, [project]);
   
   const spentBudget = useMemo(() => {
@@ -494,25 +624,147 @@ const ProjectDashboard = () => {
     });
   }, [derivedPhases]);
 
+  // Find the current active phase (first non-completed phase)
+  const currentActivePhase = useMemo(() => {
+    return derivedPhases.find((p) => p.status !== "completed") || derivedPhases[derivedPhases.length - 1];
+  }, [derivedPhases]);
+
   const derivedTasks = useMemo(() => {
     const tasks = activeSOP.tasks;
-    return tasks
-      .filter((task) => visiblePhases.some((p) => p.id === task.phase))
-      .map((task) => {
-        const phaseStatus = derivedPhases.find((p) => p.id === task.phase)?.status || task.status;
-        if (phaseStatus === "completed") {
-          return { ...task, status: "completed" };
-        }
-        if (phaseStatus === "in-progress" && task.status === "completed") {
-          return task;
-        }
-        return { ...task, status: phaseStatus === "in-progress" ? "in-progress" : "pending" };
-      });
-  }, [derivedPhases, visiblePhases, activeSOP]);
+    // Show ALL tasks from all phases
+    return tasks.map((task) => {
+      // Use unique key combining phase and task id
+      const uniqueKey = `${task.phase}-${task.id}`;
+      const isCompleted = completedTaskIds.has(uniqueKey);
+      const isVerified = verifiedTaskIds.has(uniqueKey);
+      const taskPhase = derivedPhases.find((p) => p.id === task.phase);
+      const phaseStatus = taskPhase?.status || task.status;
+      
+      // Check if task is manually completed by user
+      if (isCompleted) {
+        return { ...task, uniqueKey, status: "completed", verified: isVerified, phaseName: taskPhase?.name };
+      }
+      if (phaseStatus === "completed") {
+        return { ...task, uniqueKey, status: "completed", verified: isVerified, phaseName: taskPhase?.name };
+      }
+      if (phaseStatus === "in-progress" && task.status === "completed") {
+        return { ...task, uniqueKey, verified: isVerified, phaseName: taskPhase?.name };
+      }
+      return { 
+        ...task, 
+        uniqueKey, 
+        status: phaseStatus === "in-progress" ? "in-progress" : "pending", 
+        verified: false,
+        phaseName: taskPhase?.name
+      };
+    });
+  }, [derivedPhases, activeSOP, completedTaskIds, verifiedTaskIds]);
+
+  // Group tasks by phase for display
+  const tasksByPhase = useMemo(() => {
+    const grouped = {};
+    derivedTasks.forEach((task) => {
+      if (!grouped[task.phase]) {
+        const phase = derivedPhases.find((p) => p.id === task.phase);
+        grouped[task.phase] = {
+          phaseId: task.phase,
+          phaseName: phase?.name || `Phase ${task.phase}`,
+          phaseStatus: phase?.status || "pending",
+          tasks: []
+        };
+      }
+      grouped[task.phase].tasks.push(task);
+    });
+    return Object.values(grouped);
+  }, [derivedTasks, derivedPhases]);
+
+  // Handle task click to toggle completion (just marks as checked, not verified)
+  const handleTaskClick = async (e, uniqueKey) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    let newCompleted, newVerified;
+    
+    setCompletedTaskIds((prev) => {
+      const updated = new Set(prev);
+      if (updated.has(uniqueKey)) {
+        updated.delete(uniqueKey);
+      } else {
+        updated.add(uniqueKey);
+      }
+      newCompleted = Array.from(updated);
+      return updated;
+    });
+    
+    // Also remove from verified if unchecking
+    setVerifiedTaskIds((prev) => {
+      const updated = new Set(prev);
+      if (!newCompleted.includes(uniqueKey)) {
+        updated.delete(uniqueKey);
+      }
+      newVerified = Array.from(updated);
+      return updated;
+    });
+    
+    // Save to database
+    if (project?.id && authFetch) {
+      try {
+        await authFetch(`/projects/${project.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            completedTasks: newCompleted,
+            verifiedTasks: newVerified
+          })
+        });
+      } catch (error) {
+        console.error("Failed to save task state:", error);
+      }
+    }
+  };
+  
+  // Handle verify button click - this updates progress
+  const handleVerifyTask = async (e, uniqueKey) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    let newVerified;
+    
+    setVerifiedTaskIds((prev) => {
+      const updated = new Set(prev);
+      updated.add(uniqueKey);
+      newVerified = Array.from(updated);
+      return updated;
+    });
+    
+    // Calculate new progress
+    const allTasks = activeSOP.tasks;
+    const totalTasks = allTasks.length;
+    const verifiedCount = allTasks.filter((t) => 
+      newVerified.includes(`${t.phase}-${t.id}`)
+    ).length;
+    const newProgress = Math.round((verifiedCount / totalTasks) * 100);
+    
+    // Save to database
+    const currentCompleted = Array.from(completedTaskIds);
+    updateProjectProgress(newProgress, currentCompleted, newVerified);
+  };
 
   const completedPhases = derivedPhases.filter((p) => p.status === "completed").length;
   const pageTitle = project?.title ? `Project: ${project.title}` : "Project Dashboard";
 
+
+  // Show skeleton while loading
+  if (isLoading) {
+    return (
+      <RoleAwareSidebar>
+        <div className="mt-5 ml-5">
+          <ClientTopBar title="Loading..." />
+        </div>
+        <ProjectDetailSkeleton />
+      </RoleAwareSidebar>
+    );
+  }
 
   return (
     <RoleAwareSidebar>
@@ -565,14 +817,13 @@ const ProjectDashboard = () => {
               <Card className="border border-border/60 bg-card/80 shadow-sm backdrop-blur">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg text-foreground">Project Phases</CardTitle>
-                  <CardDescription className="text-muted-foreground">Monitor each phase. Click to update progress.</CardDescription>
+                  <CardDescription className="text-muted-foreground">Monitor each phase of your project</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {derivedPhases.map((phase, index) => (
                     <div
                       key={phase.id}
-                      className="flex items-start gap-3 pb-3 border-b border-border/60 last:border-0 last:pb-0 cursor-pointer hover:bg-accent/40 p-2 rounded transition-colors"
-                      onClick={() => handlePhaseClick(index)}
+                      className="flex items-start gap-3 pb-3 border-b border-border/60 last:border-0 last:pb-0 p-2 rounded"
                     >
                       <div className="mt-1">{getPhaseIcon(phase.status)}</div>
                       <div className="flex-1 min-w-0">
@@ -597,35 +848,79 @@ const ProjectDashboard = () => {
                 </CardContent>
               </Card>
 
+              {/* All Tasks Grouped by Phase - Accordion */}
               <Card className="border border-border/60 bg-card/80 shadow-sm backdrop-blur">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg text-foreground">
-                    {visiblePhases[visiblePhases.length - 1]?.name || "Project Tasks"}
-                  </CardTitle>
+                  <CardTitle className="text-lg text-foreground">Project Tasks</CardTitle>
                   <CardDescription className="text-muted-foreground">
-                    {derivedTasks.filter((t) => t.status === "completed").length} of {derivedTasks.length} tasks completed
+                    {derivedTasks.filter((t) => t.verified).length} of {derivedTasks.length} tasks verified
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  {derivedTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-card hover:bg-accent transition-colors"
-                    >
-                      {task.status === "completed" ? (
-                        <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                      ) : (
-                        <Circle className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                      )}
-                      <span
-                        className={`flex-1 text-sm ${
-                          task.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"
-                        }`}
-                      >
-                        {task.title}
-                      </span>
-                    </div>
-                  ))}
+                <CardContent>
+                  <Accordion type="single" collapsible defaultValue={currentActivePhase?.id} className="w-full">
+                    {tasksByPhase.map((phaseGroup) => (
+                      <AccordionItem key={phaseGroup.phaseId} value={phaseGroup.phaseId} className="border-border/60">
+                        <AccordionTrigger className="hover:no-underline py-3">
+                          <div className="flex items-center gap-3 flex-1">
+                            {getPhaseIcon(phaseGroup.phaseStatus)}
+                            <div className="flex-1 text-left">
+                              <div className="font-semibold text-sm text-foreground">{phaseGroup.phaseName}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {phaseGroup.tasks.filter((t) => t.verified).length} of {phaseGroup.tasks.length} verified
+                              </div>
+                            </div>
+                            <Badge 
+                              variant={phaseGroup.phaseStatus === "completed" ? "default" : "outline"}
+                              className={phaseGroup.phaseStatus === "completed" ? "bg-emerald-500 text-white" : ""}
+                            >
+                              {phaseGroup.phaseStatus === "completed" ? "Completed" : 
+                               phaseGroup.phaseStatus === "in-progress" ? "In Progress" : "Pending"}
+                            </Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-2 pt-2">
+                            {phaseGroup.tasks.map((task) => (
+                              <div
+                                key={task.uniqueKey}
+                                className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-card hover:bg-accent/60 transition-colors cursor-pointer"
+                                onClick={(e) => handleTaskClick(e, task.uniqueKey)}
+                              >
+                                {task.status === "completed" ? (
+                                  <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                                ) : (
+                                  <Circle className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                                )}
+                                <span
+                                  className={`flex-1 text-sm ${
+                                    task.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"
+                                  }`}
+                                >
+                                  {task.title}
+                                </span>
+                                {task.status === "completed" && (
+                                  task.verified ? (
+                                    <Badge className="h-7 px-3 text-xs bg-emerald-500 text-white">
+                                      Verified
+                                    </Badge>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-3 text-xs border-primary text-primary hover:bg-primary/10"
+                                      onClick={(e) => handleVerifyTask(e, task.uniqueKey)}
+                                    >
+                                      Verify
+                                    </Button>
+                                  )
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
                 </CardContent>
               </Card>
             </div>

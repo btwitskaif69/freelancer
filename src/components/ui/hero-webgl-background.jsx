@@ -104,7 +104,7 @@ class DofPointsMaterial extends THREE.ShaderMaterial {
                         circleMask;
 
           float stableAlpha = max(alpha, 0.15);
-          gl_FragColor = vec4(vec3(1.0), mix(alpha, stableAlpha, clamp(uTransition, 0.0, 1.0)));
+          gl_FragColor = vec4(vec3(3), mix(alpha, stableAlpha, clamp(uTransition, 0.0, 1.0)));
         }
       `,
       uniforms: {
@@ -390,13 +390,13 @@ const HeroWebGLBackground = ({
   },
   gridOpacity = 0.35,
 }) => {
-  const speed = 1.0;
+  const speed = 1.5;
   const noiseScale = 0.6;
   const noiseIntensity = 0.52;
   const timeScale = 1.0;
   const focus = 3.8;
   const aperture = 1.79;
-  const pointSize = 10.0;
+  const pointSize = 7.5;
   const opacity = 0.8;
   const planeScale = 10.0;
   const size = 512;

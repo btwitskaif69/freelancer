@@ -9,6 +9,7 @@ import {
   listMessages,
   getConversation
 } from "./chat-store.js";
+import { setIoInstance, sendNotificationToUser } from "./notification-util.js";
 
 const normalizeOrigin = (value = "") => value.trim().replace(/\/$/, "");
 const parseOrigins = (value = "") =>
@@ -26,7 +27,10 @@ const allowedOrigins = [
 ].filter(Boolean);
 
 const serializeMessage = (message) => ({
-  ...message,
+  content: message.content,
+  senderId: message.senderId,
+  senderRole: message.senderRole,
+  readAt: message.readAt,
   createdAt:
     message.createdAt instanceof Date
       ? message.createdAt.toISOString()
@@ -54,6 +58,9 @@ export const initSocket = (server) => {
     }
   });
 
+  // Store io globally for use in HTTP controllers via notification-util
+  setIoInstance(io);
+
   io.on("connection", (socket) => {
     const joinedConversations = new Set();
     const presenceKeys = new Map(); // conversationId -> userKey
@@ -66,6 +73,25 @@ export const initSocket = (server) => {
         online
       });
     };
+
+    // Helper to send notification to a specific user
+    const sendNotification = (userId, notification) => {
+      if (!userId) return;
+      const roomName = `user:${userId}`;
+      io.to(roomName).emit("notification:new", {
+        id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        ...notification,
+        createdAt: new Date().toISOString()
+      });
+    };
+
+    // Join user's personal notification room
+    socket.on("notification:join", ({ userId }) => {
+      if (!userId) return;
+      const roomName = `user:${userId}`;
+      socket.join(roomName);
+      console.log(`[Socket] User ${userId} joined notification room: ${roomName}`);
+    });
 
     socket.on("chat:join", async ({ conversationId, service, senderId }) => {
       console.log(`[Socket] chat:join request:`, { conversationId, service, senderId, socketId: socket.id });
@@ -136,6 +162,33 @@ export const initSocket = (server) => {
         socket.emit("chat:error", {
           message: "Unable to join chat. Please try again."
         });
+      }
+    });
+
+    socket.on("chat:read", async ({ conversationId, userId }) => {
+      if (!conversationId || !userId) return;
+
+      try {
+        // Mark messages as read in DB where sender is NOT the current user
+        await prisma.chatMessage.updateMany({
+          where: {
+            conversationId,
+            senderId: { not: userId }, // Mark others' messages as read
+            readAt: null
+          },
+          data: {
+            readAt: new Date()
+          }
+        });
+
+        // Broadcast read receipt to the room (so the sender sees blue ticks)
+        io.to(conversationId).emit("chat:read_receipt", {
+          conversationId,
+          readerId: userId,
+          readAt: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error("Failed to mark messages as read:", error);
       }
     });
 
@@ -271,10 +324,58 @@ export const initSocket = (server) => {
             }
           });
 
-          io.to(conversation.id).emit(
-            "chat:message",
-            serializeMessage(userMessage)
-          );
+          // Update conversation timestamp for sorting
+          await prisma.chatConversation.update({
+            where: { id: conversation.id },
+            data: { updatedAt: new Date() }
+          });
+
+            io.to(conversation.id).emit(
+              "chat:message",
+              serializeMessage(userMessage)
+            );
+
+            // Send notification to the other participant
+            const convService = serviceKey || conversation.service || "";
+            if (convService.startsWith("CHAT:")) {
+              const parts = convService.split(":");
+              if (parts.length >= 3) {
+                const [, id1, id2] = parts;
+                const recipientId = senderId === id1 ? id2 : id1;
+                
+                if (recipientId && recipientId !== senderId) {
+                  sendNotificationToUser(recipientId, {
+                    type: "chat",
+                    title: "New Message",
+                    message: `${senderName || "Someone"}: ${content.slice(0, 50)}${content.length > 50 ? "..." : ""}`,
+                    data: { 
+                      conversationId: conversation.id, 
+                      messageId: userMessage.id,
+                      service: convService,
+                      senderId
+                    }
+                  });
+                }
+              }
+            }
+
+          // Send notification to the other participant
+          // Service key format: CHAT:userId1:userId2
+          if (serviceKey && serviceKey.startsWith("CHAT:")) {
+            const parts = serviceKey.split(":");
+            if (parts.length >= 3) {
+              const [, id1, id2] = parts;
+              const recipientId = senderId === id1 ? id2 : id1;
+              if (recipientId && recipientId !== senderId) {
+                sendNotification(recipientId, {
+                  type: "chat",
+                  title: "New Message",
+                  message: `${senderName || "Someone"}: ${content.slice(0, 50)}${content.length > 50 ? "..." : ""}`,
+                  data: { conversationId: conversation.id, messageId: userMessage.id }
+                });
+              }
+            }
+          }
         } catch (error) {
           console.error("chat:message failed", error);
           socket.emit("chat:error", {

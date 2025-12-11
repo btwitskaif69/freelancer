@@ -18,6 +18,8 @@ import {
   ChevronRight,
   Zap,
   X,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { RoleAwareSidebar } from "@/components/dashboard/RoleAwareSidebar";
 import { Button } from "@/components/ui/button";
@@ -170,16 +172,7 @@ const FreelancerCard = ({ freelancer, onSend, canSend, onViewProfile }) => {
         {/* Styled "Outline Box" */}
         <div className="relative overflow-hidden rounded-xl bg-muted/30 border border-border/50 p-5 text-foreground transition-all duration-300">
             
-            <div className="flex justify-between items-center mb-3 relative z-10">
-                <div className="flex items-center gap-2">
-                    <Zap className="w-3.5 h-3.5 text-primary" />
-                    <h4 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground">About Me</h4>
-                </div>
-            </div>
-
-            <p className="text-[13px] text-muted-foreground line-clamp-3 mb-5 leading-relaxed relative z-10 font-normal tracking-wide">
-                {freelancer.bio || `Experienced ${freelancer.specialty} professional ready to help with your project.`}
-            </p>
+            {/* About Me header and bio removed as per request */}
           
             <div className="flex flex-wrap gap-2 relative z-10">
                 {(freelancer.skills || []).slice(0, 3).map((skill, index) => (
@@ -454,6 +447,7 @@ const ClientDashboardContent = () => {
   const [isFreelancerModalOpen, setIsFreelancerModalOpen] = useState(false);
   const [pendingSendFreelancer, setPendingSendFreelancer] = useState(null);
   const [isSendConfirmOpen, setIsSendConfirmOpen] = useState(false);
+  const [isSendingProposal, setIsSendingProposal] = useState(false);
   const [freelancers, setFreelancers] = useState([]);
   const [freelancersLoading, setFreelancersLoading] = useState(false);
   const { authFetch } = useAuth();
@@ -875,9 +869,14 @@ const ClientDashboardContent = () => {
 
   const handleConfirmSend = async () => {
     if (!pendingSendFreelancer) return;
-    await sendProposalToFreelancer(pendingSendFreelancer);
-    setPendingSendFreelancer(null);
-    setIsSendConfirmOpen(false);
+    try {
+      setIsSendingProposal(true);
+      await sendProposalToFreelancer(pendingSendFreelancer);
+      setPendingSendFreelancer(null);
+      setIsSendConfirmOpen(false);
+    } finally {
+      setIsSendingProposal(false);
+    }
   };
 
   const handleCancelSend = () => {
@@ -1060,12 +1059,12 @@ const ClientDashboardContent = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                     onClick={handleClearSavedProposal}
                     disabled={!hasSavedProposal}
-                    aria-label="Clear saved proposal"
+                    aria-label="Delete saved proposal"
                   >
-                    <PanelLeftClose className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -1292,8 +1291,15 @@ const ClientDashboardContent = () => {
               <Button variant="ghost" onClick={handleCancelSend}>
                 Cancel
               </Button>
-              <Button onClick={handleConfirmSend} disabled={!pendingSendFreelancer}>
-                Send now
+              <Button onClick={handleConfirmSend} disabled={!pendingSendFreelancer || isSendingProposal}>
+                {isSendingProposal ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  "Send now"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>

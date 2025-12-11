@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock, FileText, MoreVertical, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, FileText, MoreVertical, XCircle, Loader2 } from "lucide-react";
 import { RoleAwareSidebar } from "@/components/dashboard/RoleAwareSidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,6 +48,24 @@ const stripUnavailableSections = (text = "") => {
   });
 
   return filtered.join("\n").trim();
+  return filtered.join("\n").trim();
+};
+
+const normalizeBudgetText = (text = "") => {
+  // Look for lines starting with "Budget: INR X" or "Budget: X"
+  // and replace X with 0.7 * X (Platform Fee deduction)
+  return text.replace(/Budget:\s*(?:INR\s*)?([0-9,]+)/i, (match, value) => {
+    let cleanValue = value.replace(/,/g, "");
+    let num = parseFloat(cleanValue);
+    
+    if (!isNaN(num)) {
+       // Apply 0.7 reduction
+       const deducted = Math.round(num * 0.7);
+       return `Budget: INR ${deducted}`;
+    }
+    
+    return match;
+  });
 };
 
 const statusConfig = {
@@ -134,21 +152,20 @@ const mapApiProposal = (proposal = {}) => {
     proposalId: proposal.id
       ? `PRP-${proposal.id.slice(0, 6).toUpperCase()}`
       : `PRP-${Math.floor(Math.random() * 9000 + 1000)}`,
-    avatar:
-      proposal.avatar ||
-      "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=256&q=80",
-    budget: proposal.amount || null,
-    content: stripUnavailableSections(
+    // Display budget as 30% less (Platform Fee deduction)
+    budget: proposal.amount ? Math.floor(Number(proposal.amount) * 0.7) : null,
+    content: normalizeBudgetText(stripUnavailableSections(
       proposal.content ||
         proposal.description ||
         proposal.summary ||
         proposal.project?.description ||
         ""
-    ),
+    )),
   };
 };
 
-const ProposalCard = ({ proposal, onStatusChange, onOpen }) => {
+const ProposalCard = ({ proposal, onStatusChange, onOpen, isProcessing }) => {
+  const [imgError, setImgError] = useState(false);
   const config = statusConfig[proposal.status];
   const StatusIcon = config.icon;
 
@@ -159,12 +176,19 @@ const ProposalCard = ({ proposal, onStatusChange, onOpen }) => {
     <Card className="group overflow-hidden border border-border/50 bg-card/70 shadow-sm transition-all duration-300 hover:border-primary/30 hover:shadow-lg">
       <CardContent className="p-5 lg:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-6">
-          <div className="relative h-16 w-16 flex-shrink-0 rounded-2xl border border-border/50 bg-muted/60 shadow-inner">
-            <img
-              src={proposal.avatar}
-              alt={proposal.recipientName}
-              className="h-full w-full rounded-2xl object-cover"
-            />
+          <div className="relative h-16 w-16 flex-shrink-0 rounded-2xl border border-border/50 bg-muted/60 shadow-inner overflow-hidden">
+            {!imgError && proposal.avatar ? (
+                <img
+                    src={proposal.avatar}
+                    alt={proposal.recipientName}
+                    className="h-full w-full object-cover"
+                    onError={() => setImgError(true)}
+                />
+            ) : (
+                <div className="flex h-full w-full items-center justify-center bg-primary/10 text-primary font-bold text-xl">
+                    {proposal.recipientName?.charAt(0).toUpperCase()}
+                </div>
+            )}
             <span
               className={`absolute bottom-1 right-1 h-3.5 w-3.5 rounded-full ring-2 ring-card ${config.dotColor}`}
             />
@@ -218,8 +242,9 @@ const ProposalCard = ({ proposal, onStatusChange, onOpen }) => {
                 variant="secondary"
                 className="border-border"
                 onClick={() => handleMove("received")}
+                disabled={isProcessing}
               >
-                Mark received
+                {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Mark received"}
               </Button>
             )}
             {proposal.status === "received" && (
@@ -228,16 +253,18 @@ const ProposalCard = ({ proposal, onStatusChange, onOpen }) => {
                   size="sm"
                   className="bg-primary text-primary-foreground hover:bg-primary/90"
                   onClick={() => handleMove("accepted")}
+                  disabled={isProcessing}
                 >
-                  Accept
+                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept"}
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   className="border-border"
                   onClick={() => handleMove("rejected")}
+                  disabled={isProcessing}
                 >
-                  Reject
+                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reject"}
                 </Button>
               </>
             )}
@@ -245,8 +272,10 @@ const ProposalCard = ({ proposal, onStatusChange, onOpen }) => {
               size="sm"
               variant="outline"
               className="border-border"
-              onClick={handleDelete}>
-              Delete
+              onClick={handleDelete}
+              disabled={isProcessing}
+            >
+               {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
             </Button>
             <button className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden">
               <MoreVertical className="h-4 w-4" />
@@ -289,7 +318,7 @@ const ProposalCardSkeleton = () => (
   </Card>
 );
 
-const Section = ({ title, items, onStatusChange, onOpenProposal, empty, isLoading }) => (
+const Section = ({ title, items, onStatusChange, onOpenProposal, empty, isLoading, processingId }) => (
   <div className="space-y-3">
     <div className="flex items-center justify-between">
       <h2 className="text-lg font-semibold">{title}</h2>
@@ -311,6 +340,7 @@ const Section = ({ title, items, onStatusChange, onOpenProposal, empty, isLoadin
             proposal={proposal}
             onStatusChange={onStatusChange}
             onOpen={onOpenProposal}
+            isProcessing={processingId === proposal.id}
           />
         ))}
       </div>
@@ -349,11 +379,9 @@ const mapLocalProposal = (proposal = {}) => ({
   freelancerId: proposal.freelancerId || null,
   submittedDate: proposal.submittedDate || new Date().toLocaleDateString(),
   proposalId: proposal.proposalId || `PRP-${(proposal.id || "").slice(0, 6)}`,
-  avatar:
-    proposal.avatar ||
-    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=256&q=80",
-  budget: proposal.budget || null,
-  content: stripUnavailableSections(proposal.content || ""),
+    // Display budget as 30% less (Platform Fee deduction)
+  budget: proposal.budget || (proposal.amount ? Math.floor(Number(proposal.amount) * 0.7) : null),
+  content: normalizeBudgetText(stripUnavailableSections(proposal.content || "")),
   isLocal: true,
 });
 
@@ -363,6 +391,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
   const [selectedProposal, setSelectedProposal] = useState(null);
   const [isLoadingProposal, setIsLoadingProposal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [processingId, setProcessingId] = useState(null);
 
   const syncClientLocalCache = (proposalId, status) => {
     if (typeof window === "undefined" || !proposalId) return;
@@ -417,6 +446,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
   }, [proposals]);
 
   const handleStatusChange = async (id, nextStatus) => {
+    setProcessingId(id);
     if (nextStatus === "delete") {
       try {
         await authFetch(`/proposals/${id}`, { method: "DELETE" });
@@ -467,8 +497,11 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
     } catch (error) {
       console.error("Failed to persist proposal status:", error);
       toast.error(error?.message || "Unable to update proposal status.");
+    } finally {
+      setProcessingId(null);
     }
   };
+
 
   const handleOpenProposal = async (proposal) => {
     setSelectedProposal(proposal);
@@ -519,6 +552,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             onOpenProposal={handleOpenProposal}
             empty="No pending proposals right now."
             isLoading={isLoading}
+            processingId={processingId}
           />
         )}
         {sectionsToRender.includes("received") && (
@@ -529,6 +563,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             onOpenProposal={handleOpenProposal}
             empty="Nothing has been marked received yet."
             isLoading={isLoading}
+            processingId={processingId}
           />
         )}
         {sectionsToRender.includes("accepted") && (
@@ -539,6 +574,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             onOpenProposal={handleOpenProposal}
             empty="Accepted proposals will appear here."
             isLoading={isLoading}
+            processingId={processingId}
           />
         )}
         {sectionsToRender.includes("rejected") && (
@@ -549,6 +585,7 @@ const FreelancerProposalContent = ({ filter = "all" }) => {
             onOpenProposal={handleOpenProposal}
             empty="Rejected items will show here."
             isLoading={isLoading}
+            processingId={processingId}
           />
         )}
       </div>

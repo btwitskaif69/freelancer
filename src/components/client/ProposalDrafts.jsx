@@ -53,10 +53,8 @@ const loadDrafts = () => {
     const isExplicitlySaved = Boolean(parsed.savedAt) && Boolean(parsed.isSavedDraft);
     
     if (!isExplicitlySaved) {
-      // Clean up proposals that don't have proper save flags
-      // This handles legacy data that might be lingering
-      console.log(`Cleaning up unsaved proposal from ${key}`);
-      window.localStorage.removeItem(key);
+      // Just skip showing it in drafts, but DO NOT delete it
+      // It might be a pending proposal for the dashboard
       return;
     }
     

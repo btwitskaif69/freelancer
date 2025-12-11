@@ -9,10 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FreelancerTopBar } from "@/components/freelancer/FreelancerTopBar";
-import { SendHorizontal, Paperclip, Loader2, Clock4 } from "lucide-react";
+import { SendHorizontal, Paperclip, Loader2, Clock4, Check, CheckCheck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiClient, SOCKET_IO_URL, SOCKET_OPTIONS, SOCKET_ENABLED } from "@/lib/api-client";
 import { useAuth } from "@/context/AuthContext";
+import { useNotifications } from "@/context/NotificationContext";
 
 const SERVICE_LABEL = "Project Chat";
 
@@ -126,11 +127,22 @@ const ChatArea = ({
                     {message.content}
                   </p>
                 )}
-                {message.createdAt ? (
-                  <span className="text-[10px] lowercase opacity-70 whitespace-nowrap">
-                    {formatTime(message.createdAt)}
-                  </span>
-                ) : null}
+                  <div className="flex items-center gap-1 self-end mt-1">
+                    {message.createdAt ? (
+                      <span className="text-[10px] lowercase opacity-70 whitespace-nowrap">
+                        {formatTime(message.createdAt)}
+                      </span>
+                    ) : null}
+                     {isSelf && (
+                      <span className="ml-1" title={message.readAt ? `Read ${formatTime(message.readAt)}` : "Sent"}>
+                        {message.readAt ? (
+                          <CheckCheck className="h-3.5 w-3.5 text-blue-600" strokeWidth={2.5} />
+                        ) : (
+                          <Check className="h-3.5 w-3.5 text-black/50" strokeWidth={2} />
+                        )}
+                      </span>
+                    )}
+                  </div>
               </div>
             </div>
           );
@@ -184,6 +196,7 @@ const ChatArea = ({
 
 const FreelancerChatContent = () => {
   const { user, authFetch, token } = useAuth();
+  const { socket: notificationSocket } = useNotifications();
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState("");
@@ -281,11 +294,17 @@ const FreelancerChatContent = () => {
             name: owner.fullName || owner.name || owner.email || "Client",
             avatar: owner.avatar,
             label: item.project?.title || "Client Project",
-            serviceKey: sharedKey
+            serviceKey: sharedKey,
+            // Add timestamp for sorting - use proposal's updatedAt or createdAt
+            serviceKey: sharedKey,
+            // Add timestamp for sorting - use backend provided lastActivity if available
+            lastActivity: new Date(item.lastActivity || item.updatedAt || item.createdAt || 0).getTime(),
+            unreadCount: 0
           });
         }
 
-        const finalList = uniq;
+        // Sort by most recent activity (newest first)
+        const finalList = uniq.sort((a, b) => b.lastActivity - a.lastActivity);
         if (!cancelled) {
           setConversations(finalList);
           // If we have conversations, select the first one by default.
@@ -374,10 +393,24 @@ const FreelancerChatContent = () => {
     socket.on("chat:joined", (payload) => {
       if (payload?.conversationId) {
         setConversationId(payload.conversationId);
+        // Mark as read immediately upon joining
+        socket.emit("chat:read", { conversationId: payload.conversationId, userId: user?.id });
         if (typeof window !== "undefined") {
           window.localStorage.setItem(storageKey, payload.conversationId);
         }
       }
+    });
+
+    socket.on("chat:read_receipt", ({ conversationId: cid, readerId, readAt }) => {
+       if (cid !== conversationId) return;
+       setMessages(prev => prev.map(msg => {
+         // Mark all messages sent by ME (or as 'user') as read if reader is someone else
+         // Simplification: just mark anything unread as read if it's not the reader's own message
+         if (String(msg.senderId) === String(user?.id) || msg.senderRole === "FREELANCER") { 
+             return { ...msg, readAt: readAt || new Date().toISOString() };
+         }
+         return msg;
+       }));
     });
 
     socket.on("chat:history", (history = []) => {
@@ -398,6 +431,22 @@ const FreelancerChatContent = () => {
         );
         return [...filtered, message];
       });
+      
+      // Move this conversation to the top (like WhatsApp)
+      setConversations((prev) => {
+        const updated = prev.map((conv) => {
+          if ((conv.serviceKey || conv.id) === (selectedConversation?.serviceKey || selectedConversation?.id)) {
+            return { ...conv, lastActivity: Date.now() };
+          }
+          return conv;
+        });
+        return updated.sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
+      });
+
+      // If we are viewing this conversation, mark the new message as read immediately
+      if (message.conversationId === conversationId && String(message.senderId) !== String(user?.id)) {
+         socket.emit("chat:read", { conversationId, userId: user?.id });
+      }
     });
 
     socket.on("chat:error", (payload) => {
@@ -444,6 +493,46 @@ const FreelancerChatContent = () => {
     };
   }, [conversationId, selectedConversation, useSocket, user?.id]);
 
+  // Separate effect for global notifications (sorting and unread counts)
+  useEffect(() => {
+    if (!notificationSocket) return;
+
+    const handleNotification = (data) => {
+      console.log("[FreelancerChat] Notification received:", data); // Debug log
+      if (data.type === "chat" && data.data) {
+         const { service, senderId } = data.data;
+         
+         setConversations((prev) => {
+           console.log("[FreelancerChat] Updating conversations for service:", service, "Sender:", senderId);
+           const updated = prev.map(c => {
+             // Match by serviceKey (best) or ID (fallback)
+             const isMatch = (c.serviceKey && c.serviceKey === service) || 
+                             (c.id === senderId); // Match client ID
+             
+             if (isMatch) {
+               console.log("[FreelancerChat] Matched conversation:", c.name);
+               // Check if this conversation is currently selected
+               const isSelected = (c.serviceKey || c.id) === (selectedConversation?.serviceKey || selectedConversation?.id);
+               return { 
+                 ...c, 
+                 lastActivity: Date.now(),
+                 unreadCount: isSelected ? 0 : (c.unreadCount || 0) + 1
+               };
+             }
+             return c;
+           });
+           
+           return updated.sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
+         });
+      }
+    };
+    
+    notificationSocket.on("notification:new", handleNotification);
+    return () => {
+      notificationSocket.off("notification:new", handleNotification);
+    };
+  }, [notificationSocket, selectedConversation]);
+
   const handleSendMessage = () => {
     if (!messageInput.trim()) return;
 
@@ -462,6 +551,18 @@ const FreelancerChatContent = () => {
     ]);
     setMessageInput("");
     setSending(true);
+    
+    // Move this conversation to the top immediately when sending (like WhatsApp)
+    setConversations((prev) => {
+      const updated = prev.map((conv) => {
+        if ((conv.serviceKey || conv.id) === (selectedConversation?.serviceKey || selectedConversation?.id)) {
+          return { ...conv, lastActivity: Date.now() };
+        }
+        return conv;
+      });
+      return updated.sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
+    });
+    
     if (useSocket && socketRef.current) {
       socketRef.current.emit("chat:message", payload);
     } else {
@@ -548,12 +649,17 @@ const FreelancerChatContent = () => {
                   return (
                     <button
                       key={conversation.serviceKey || conversation.id}
-                      onClick={() => setSelectedConversation(conversation)}
-                      className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition ${
-                        isActive
+                      className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition ${isActive
                         ? "bg-primary border-primary shadow-sm"
                         : "border-border/50 hover:border-primary/30 hover:bg-muted/50"
                       }`}
+                      onClick={() => {
+                        setSelectedConversation(conversation);
+                        // Reset unread count
+                        setConversations(prev => prev.map(c => 
+                          (c.serviceKey === conversation.serviceKey) ? { ...c, unreadCount: 0 } : c
+                        ));
+                      }}
                     >
                       <Avatar className="h-10 w-10">
                         <AvatarImage
@@ -564,9 +670,18 @@ const FreelancerChatContent = () => {
                           {conversation.name?.[0] || "C"}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex flex-1 flex-col">
-                        <p className={`font-semibold ${nameClass}`}>{conversation.name}</p>
-                        <p className={`text-xs line-clamp-1 ${labelClass}`}>
+                      <div className="flex-1 overflow-hidden">
+                        <div className="flex justify-between items-center mb-1">
+                          <p className={`truncate font-medium transition-colors ${nameClass}`}>
+                            {conversation.name}
+                          </p>
+                          {conversation.unreadCount > 0 && (
+                            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                              {conversation.unreadCount}
+                            </span>
+                          )}
+                        </div>
+                        <p className={`truncate text-xs transition-colors ${labelClass}`}>
                           {conversation.label || SERVICE_LABEL}
                         </p>
                       </div>

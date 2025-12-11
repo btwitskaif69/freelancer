@@ -20,24 +20,20 @@ Fast-Paced Editing with Jump Cuts
 On-Screen Text & Captions
 Google My Business (GMB) Optimisation - Rs 25000 (3 months)
 
-•⁠  ⁠Profile Optimization
-•⁠  ⁠Products/Services & Photo/videos update
-•⁠  ⁠Graphics posts related to your service/product
-•⁠  ⁠Local SEO with 7 Keywords
-•⁠  ⁠Citations (NAP)
-•⁠  ⁠Content Optimization
-•⁠  ⁠Online reputation management 
-•⁠  ⁠Track Traffic and phone calls
-•⁠  ⁠Analyze GMB insights (views, clicks, calls)
-•⁠  ⁠Improve google ranking
-•⁠  ⁠Tracking insights and analytics
-
+•⁠ ⁠Profile Optimization
+•⁠ ⁠Products/Services & Photo/videos update
+•⁠ ⁠Graphics posts related to your service/product
+•⁠ ⁠Local SEO with 7 Keywords
+•⁠ ⁠Citations (NAP)
+•⁠ ⁠Content Optimization
+•⁠ ⁠Online reputation management
+•⁠ ⁠Track Traffic and phone calls
+•⁠ ⁠Analyze GMB insights (views, clicks, calls)
+•⁠ ⁠Improve google ranking
+•⁠ ⁠Tracking insights and analytics
 
 GMB INDIAN Reviews - Rs 80/review
 GMB International Reviews - Rs 150/review
-
-
-
 
 Search Engine Optimisation (SEO) - Rs 12000/month
 
@@ -52,8 +48,6 @@ On-Page SEO Optimization
 Off-Page SEO Optimization
 ORM & Reviews
 
-
-
 Social Media Marketing - Rs. 18,000/month
 
 Defining Brand Tone & Strategy
@@ -65,9 +59,6 @@ Cross-Platform Integration
 Content Strategy and Management
 Analytics and Reporting
 
-
-
-
 Meta Ads { facebook /Instagram} - Rs. 10000/month
 
 Campaign Strategy Development
@@ -77,9 +68,6 @@ Efficient Ad Spend Allocation & Management
 Retargeting & Re-engagement Strategies
 A/B Testing for Continuous Improvement
 Performance Tracking & Reporting
-
-
-
 
 Google Ads - Rs. 10000/month
 
@@ -93,13 +81,6 @@ Setting up and monitoring conversion tracking
 Detailed analysis of campaign performance
 In-depth reporting on key metrics and KPIs
 
-
-
-
-
-
-
-
 Informative | Dynamic Website
 
 Landing Page - Rs 10,000
@@ -108,16 +89,12 @@ Informative (3D on Wordpress) - Rs 35,000
 Custom - Rs 60,000
 3D Website (Framer/WebFlow) - Rs 80,000
 
-
 Website Development and Design
 Content & Graphics, Videos
 Responsive Design and API Integration
 Social Media Integration
 Performance Optimization
 Forms & Surveys
-
-
-
 
 E-Commerce Website
 
@@ -128,12 +105,11 @@ Custom(Shopify) - Rs 80,000
 Custom(ReactJS + Node JS) - Rs 1,50,000
 3D Website (Custom) - Rs 1L- 4L
 
-
 Website Development and Design
 Content & Graphics
 Payment Gateway Integration
 Implement a Secure Payment System
-Set up Product Pages 
+Set up Product Pages
 Shipping and Logistics Integration
 Shopping Cart and Checkout Process
 Customer Support Integration

@@ -43,13 +43,41 @@ const stripUnavailableSections = (text = "") => {
     return filtered.join("\n").trim();
 };
 
+const normalizeBudgetText = (text = "") => {
+    // Look for lines starting with "Budget:" and normalize the value part
+    return text.replace(/Budget:\s*(.*)/i, (match, value) => {
+        let cleanValue = value;
+        const lower = value.toLowerCase().replace(/,/g, "");
+        
+        // Check for 'k' (thousands)
+        if (lower.includes("k")) {
+            const num = parseFloat(lower.replace(/[^0-9.]/g, ""));
+            if (!isNaN(num)) {
+                cleanValue = `INR ${Math.round(num * 1000)}`;
+            }
+        } 
+        // Check for 'l' or 'lakh' (lakhs)
+        else if (lower.includes("l") || lower.includes("lakh")) {
+            const num = parseFloat(lower.replace(/[^0-9.]/g, ""));
+            if (!isNaN(num)) {
+                cleanValue = `INR ${Math.round(num * 100000)}`;
+            }
+        }
+
+        return `Budget: ${cleanValue}`;
+    });
+};
+
 const ProposalPanel = ({ content }) => {
     if (!content) return null;
 
     const navigate = useNavigate();
     const { user } = useAuth();
 
-    const cleanContent = useMemo(() => stripUnavailableSections(content), [content]);
+    const cleanContent = useMemo(() => {
+        const stripped = stripUnavailableSections(content);
+        return normalizeBudgetText(stripped);
+    }, [content]);
 
     // Local state for editing
     const [isEditing, setIsEditing] = useState(false);
@@ -69,14 +97,42 @@ const ProposalPanel = ({ content }) => {
 
         const projectTitle = getValue("Project Title") || getValue("Project") || "Project Proposal";
         const preparedFor = getValue("Prepared for") || getValue("For") || "Client";
-        const budget = getValue("Budget") || "";
+        
+        // Parse budget to clean numbers for dashboard logic
+        let rawBudget = getValue("Budget") || "";
+        let budget = rawBudget;
+
+        // Try to normalize "60k" -> "60000", "1.5L" -> "150000" if it contains text
+        try {
+           const lower = rawBudget.toLowerCase().replace(/,/g, "");
+           if (lower.includes("k")) {
+               const num = parseFloat(lower.replace(/[^0-9.]/g, ""));
+               if (!isNaN(num)) {
+                   budget = Math.round(num * 1000).toString();
+               }
+           } else if (lower.includes("l") || lower.includes("lakh")) {
+               const num = parseFloat(lower.replace(/[^0-9.]/g, ""));
+               if (!isNaN(num)) {
+                   budget = Math.round(num * 100000).toString();
+               }
+           } else {
+               // Just extract the number
+               const num = parseFloat(lower.replace(/[^0-9.]/g, ""));
+               if (!isNaN(num)) {
+                   budget = num.toString();
+               }
+           }
+        } catch (e) {
+           // fallback to raw string
+        }
+
         const service = projectTitle;
 
         return {
             service,
             projectTitle,
             preparedFor,
-            budget,
+            budget, // This is now a clean string number "60000" or raw text if fail
             summary: editableContent,
             raw: { content: editableContent }
         };

@@ -16,6 +16,7 @@ import {
   listMessages,
   addMessage,
 } from "../lib/chat-store.js";
+import { sendNotificationToUser } from "../lib/notification-util.js";
 
 const MIN_WEBSITE_PRICE = 10000;
 const MIN_WEBSITE_PRICE_DISPLAY = "INR 10,000";
@@ -521,7 +522,7 @@ const devTechFlow = `Conversation format (Development & Tech):
   10) Do you have a preferred technology stack or platform? (Output options as [MULTI_SELECT: React/Next.js | Node.js | PHP/Laravel | WordPress | Python/Django | No Preference])
   11) Do you require any specific integrations? (Output options as [MULTI_SELECT: Stripe/PayPal | Google Maps | Social Login | CRM | Analytics | None])
   12) Will you require ongoing maintenance or support after the launch? (options: Yes (Monthly), Yes (Ad-hoc), No (Handover only))
-  13) What is your estimated budget? Ask for one INR amount (numbers only). If their budget is below what their chosen stack typically needs, suggest a cheaper stack or phased approach with a one-line reason before moving on.
+  13) What is your estimated budget? Ask for one INR amount. (Note to AI: When generating the final proposal, you MUST convert values like "60k" or "1 lakh" into full numbers like "60000" or "100000" without "k" or "lakh"). If their budget is below what their chosen stack typically needs, suggest a cheaper stack or phased approach with a one-line reason before moving on.
  14) What is your target go-live date or timeframe? Keep it simple and plain text (e.g., "by May 30" or "within 6 weeks"). (options: 2-4 weeks, 1-2 months, 2-3 months, Flexible)
   15) Do you require SEO, analytics, or marketing tools? (Output options as [MULTI_SELECT: Basic SEO | Full Marketing | Analytics Setup | None])
   16) Are there any AI features, chatbots, or automation requirements? (Output options as [MULTI_SELECT: AI Chatbot | Content Gen | Data Analysis | None])
@@ -530,7 +531,7 @@ const devTechFlow = `Conversation format (Development & Tech):
 - Be concise (1-2 sentences), respond promptly, and proceed to the next question.
 - Do NOT loop or restart; once key items (summary, features/pages, stack/platform, budget, timeline) are answered, move to proposal generation.`;
 
-const proposalTemplate = `When you have enough answers, generate a proposal in this exact structure. If any field or section is missing info, omit that line/section entirely (do NOT write placeholders like "Not provided" or leave bracket tokens like [Portfolio]). If there are no portfolio links or special requests, drop those sections.
+const proposalTemplate = `When you have enough answers, generate a proposal in this exact structure. If any field or section is missing info, omit that line/section entirely (do NOT write placeholders like "Not provided" or leave bracket tokens like [Portfolio]). If there are no portfolio links or special requests, drop those sections. IMPORTANT: For "Budget", convert any short forms like "60k" to "60000" and "1.5L" to "150000". Do NOT use "k" or "lakh" in the [Budget] field.
 [PROPOSAL_DATA]
 PROJECT PROPOSAL
 Project Title: [Service]
@@ -721,6 +722,12 @@ You have two options:
 2. Consider a more affordable alternative"
 [SUGGESTIONS: Increase Budget | WordPress (₹20,000) | Shopify (₹30,000) | Landing Page (₹10,000)]
 
+AFTER USER SELECTS "Increase Budget":
+If the user's last message is "Increase Budget" or contains "increase", ask:
+"What's your new budget in INR?"
+Wait for their answer before proceeding to timeline.
+DO NOT ask about timeline until you have a valid budget >= minimum.
+
 TIMELINE TOO SHORT - If user's timeline is below minimum:
 DO NOT generate proposal. Instead respond:
 "Your timeline of [user timeline] is shorter than what's required for a quality [project type] project (minimum: [min timeline]).
@@ -728,7 +735,12 @@ DO NOT generate proposal. Instead respond:
 You have two options:
 1. Extend your timeline to at least [min timeline]
 2. Consider a faster alternative"
-[SUGGESTIONS: Extend Timeline | WordPress (15-20 days) | Landing Page (1 week)]`;
+[SUGGESTIONS: Extend Timeline | WordPress (15-20 days) | Landing Page (1 week)]
+
+AFTER USER SELECTS "Extend Timeline":
+If the user's last message is "Extend Timeline" or contains "extend", ask:
+"What's your new timeline?"
+Wait for their answer before generating proposal.`;
 
   return `You are a consultant helping with "${service}" projects. Your job is to gather requirements by asking questions ONE AT A TIME.
 
@@ -776,6 +788,12 @@ If the context says "NEXT ACTION: GENERATE PROPOSAL NOW", first validate:
 1. Is budget >= minimum for their project type?
 2. Is timeline >= minimum for their project type?
 
+VERY IMPORTANT - BUDGET HANDLING:
+- Look at the "CONFIRMED BUDGET" field in the context - this is the MOST RECENT budget the user provided
+- If user said they want to increase budget, then said a new amount like "20k", use "20k" (₹20,000), NOT any earlier amount
+- The CONFIRMED BUDGET is always the correct one to use in the proposal
+- NEVER show an old/rejected budget in the proposal
+
 If YES to both, generate proposal with PRICE included:
 
 [PROPOSAL_DATA]
@@ -790,9 +808,9 @@ Summary: [Brief description of what they're building]
 Features Included:
 - [List features they mentioned]
 
-Estimated Price: [Price based on project type - use the minimum budget as base]
-Timeline: [Their timeline or minimum if theirs was too short]
-Budget: [Their confirmed budget]
+Estimated Price: [Price based on project type]
+Timeline: [Their timeline from CONFIRMED TIMELINE]
+Budget: [Their CONFIRMED BUDGET - must be the LATEST value they provided, NOT any earlier rejected values]
 
 Scope of Work:
 Phase 1: Discovery & Planning
@@ -801,8 +819,8 @@ Phase 3: Development & Integration
 Phase 4: Testing & Deployment
 
 Next Steps:
-1. Confirm scope and pricing
-2. Sign agreement and pay 50% deposit
+1. Review and confirm this proposal
+2. Sign agreement and pay deposit
 3. Kickoff meeting to begin work
 
 To customize this proposal, please use the Edit Proposal option.
@@ -1364,6 +1382,36 @@ export const addConversationMessage = asyncHandler(async (req, res) => {
       attachment: attachment ? attachment : undefined,
     },
   });
+
+  // Update conversation timestamp for sorting
+  await prisma.chatConversation.update({
+    where: { id: conversation.id },
+    data: { updatedAt: new Date() }
+  });
+
+  // Send notification to the other participant
+  // Service key format: CHAT:userId1:userId2
+  const convService = serviceKey || conversation.service || "";
+  const actualSenderId = senderId || req.user?.sub;
+  
+  if (convService.startsWith("CHAT:")) {
+    const parts = convService.split(":");
+    if (parts.length >= 3) {
+      const [, id1, id2] = parts;
+      const recipientId = actualSenderId === id1 ? id2 : id1;
+      console.log(`[Notification] Service: ${convService}, Sender: ${actualSenderId}, Recipient: ${recipientId}`);
+      if (recipientId && recipientId !== actualSenderId) {
+        sendNotificationToUser(recipientId, {
+          type: "chat",
+          title: "New Message",
+          message: `${senderName || "Someone"}: ${content.slice(0, 50)}${content.length > 50 ? "..." : ""}`,
+          data: { conversationId: conversation.id, messageId: userMessage.id }
+        });
+      }
+    }
+  } else {
+    console.log(`[Notification] Skipped - service doesn't start with CHAT: ${convService}`);
+  }
 
   let assistantMessage = null;
 

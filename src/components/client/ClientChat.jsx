@@ -134,9 +134,9 @@ const ChatArea = ({
                      {isSelf && (
                       <span className="ml-1" title={message.readAt ? `Read ${formatTime(message.readAt)}` : "Sent"}>
                         {message.readAt ? (
-                          <CheckCheck className="h-3 w-3 text-blue-300" />
+                          <CheckCheck className="h-3.5 w-3.5 text-blue-600" strokeWidth={2.5} />
                         ) : (
-                          <Check className="h-3 w-3 text-primary-foreground/70" />
+                          <Check className="h-3.5 w-3.5 text-black/50" strokeWidth={2} />
                         )}
                       </span>
                     )}

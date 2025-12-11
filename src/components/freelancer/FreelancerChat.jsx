@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FreelancerTopBar } from "@/components/freelancer/FreelancerTopBar";
-import { SendHorizontal, Paperclip, Loader2, Clock4 } from "lucide-react";
+import { SendHorizontal, Paperclip, Loader2, Clock4, Check, CheckCheck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiClient, SOCKET_IO_URL, SOCKET_OPTIONS, SOCKET_ENABLED } from "@/lib/api-client";
 import { useAuth } from "@/context/AuthContext";
@@ -127,11 +127,22 @@ const ChatArea = ({
                     {message.content}
                   </p>
                 )}
-                {message.createdAt ? (
-                  <span className="text-[10px] lowercase opacity-70 whitespace-nowrap">
-                    {formatTime(message.createdAt)}
-                  </span>
-                ) : null}
+                  <div className="flex items-center gap-1 self-end mt-1">
+                    {message.createdAt ? (
+                      <span className="text-[10px] lowercase opacity-70 whitespace-nowrap">
+                        {formatTime(message.createdAt)}
+                      </span>
+                    ) : null}
+                     {isSelf && (
+                      <span className="ml-1" title={message.readAt ? `Read ${formatTime(message.readAt)}` : "Sent"}>
+                        {message.readAt ? (
+                          <CheckCheck className="h-3.5 w-3.5 text-blue-600" strokeWidth={2.5} />
+                        ) : (
+                          <Check className="h-3.5 w-3.5 text-black/50" strokeWidth={2} />
+                        )}
+                      </span>
+                    )}
+                  </div>
               </div>
             </div>
           );
@@ -382,10 +393,24 @@ const FreelancerChatContent = () => {
     socket.on("chat:joined", (payload) => {
       if (payload?.conversationId) {
         setConversationId(payload.conversationId);
+        // Mark as read immediately upon joining
+        socket.emit("chat:read", { conversationId: payload.conversationId, userId: user?.id });
         if (typeof window !== "undefined") {
           window.localStorage.setItem(storageKey, payload.conversationId);
         }
       }
+    });
+
+    socket.on("chat:read_receipt", ({ conversationId: cid, readerId, readAt }) => {
+       if (cid !== conversationId) return;
+       setMessages(prev => prev.map(msg => {
+         // Mark all messages sent by ME (or as 'user') as read if reader is someone else
+         // Simplification: just mark anything unread as read if it's not the reader's own message
+         if (String(msg.senderId) === String(user?.id) || msg.senderRole === "FREELANCER") { 
+             return { ...msg, readAt: readAt || new Date().toISOString() };
+         }
+         return msg;
+       }));
     });
 
     socket.on("chat:history", (history = []) => {
@@ -417,6 +442,11 @@ const FreelancerChatContent = () => {
         });
         return updated.sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
       });
+
+      // If we are viewing this conversation, mark the new message as read immediately
+      if (message.conversationId === conversationId && String(message.senderId) !== String(user?.id)) {
+         socket.emit("chat:read", { conversationId, userId: user?.id });
+      }
     });
 
     socket.on("chat:error", (payload) => {

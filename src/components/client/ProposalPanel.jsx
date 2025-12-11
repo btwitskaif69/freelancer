@@ -12,6 +12,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { ArrowRight } from "lucide-react";
 
 const stripUnavailableSections = (text = "") => {
     const withoutTags = text.replace(/\[PROPOSAL_DATA\]|\[\/PROPOSAL_DATA\]/g, "");
@@ -66,8 +67,8 @@ const ProposalPanel = ({ content }) => {
             return match?.[1]?.trim() || "";
         };
 
-        const projectTitle = getValue("Project Title") || "Project Proposal";
-        const preparedFor = getValue("Prepared for") || "Client";
+        const projectTitle = getValue("Project Title") || getValue("Project") || "Project Proposal";
+        const preparedFor = getValue("Prepared for") || getValue("For") || "Client";
         const budget = getValue("Budget") || "";
         const service = projectTitle;
 
@@ -81,22 +82,23 @@ const ProposalPanel = ({ content }) => {
         };
     }, [editableContent]);
 
-    const persistProposal = () => {
+    // Accept and proceed to dashboard - saves to dashboard view only, NOT to drafts
+    const handleAccept = () => {
         if (typeof window === "undefined") return;
+        
+        // Save proposal WITHOUT isSavedDraft flag - this means it shows in Dashboard
+        // but NOT in the Proposal Drafts page
         const payload = {
             ...parsed,
             createdAt: new Date().toISOString(),
-            savedAt: new Date().toISOString(), // Mark as explicitly saved
-            isSavedDraft: true // Flag to indicate this is a saved draft
+            // NOTE: No savedAt or isSavedDraft flag - so it won't appear in drafts
+            // User must click "Save" on Dashboard to save to drafts
         };
-        // Keep keys in sync with dashboard/auth sync logic
         window.localStorage.setItem("markify:savedProposal", JSON.stringify(payload));
         window.localStorage.removeItem("markify:savedProposalSynced");
-        toast.success("Proposal saved. Log in to send it.");
-    };
-
-    const handleAccept = () => {
-        persistProposal();
+        
+        toast.success("Proposal accepted! Redirecting to dashboard...");
+        
         if (user?.role === "CLIENT") {
             navigate("/client");
             return;
@@ -140,10 +142,11 @@ const ProposalPanel = ({ content }) => {
                             Edit Proposal
                         </Button>
                         <Button
-                            className="flex-[2] bg-emerald-600 hover:bg-emerald-700 text-white"
+                            className="flex-[2] gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
                             onClick={handleAccept}
                         >
                             Accept Proposal
+                            <ArrowRight className="h-4 w-4" />
                         </Button>
                     </div>
                 </CardContent>

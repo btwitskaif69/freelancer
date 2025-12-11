@@ -1,10 +1,33 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, Component } from "react";
 import * as THREE from "three";
 import { Canvas, createPortal, useFrame } from "@react-three/fiber";
 import { Effects, useFBO } from "@react-three/drei";
 import * as easing from "maath/easing";
 
 import { cn } from "@/lib/utils";
+
+// Error boundary to catch WebGL rendering errors
+class WebGLErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("WebGL Error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || null;
+    }
+    return this.props.children;
+  }
+}
 
 // Periodic noise shared across shaders
 const periodicNoiseGLSL = /* glsl */ `
@@ -89,7 +112,6 @@ class DofPointsMaterial extends THREE.ShaderMaterial {
           float revealMask = 1.0 - smoothstep(revealThreshold - 0.2, revealThreshold + 0.1, distanceFromCenter);
           float sparkleBrightness = sparkleNoise(vInitialPosition, uTime);
 
-          // Circle mask per point to avoid square sprites
           float d = length(gl_PointCoord - 0.5);
           float circleMask = 1.0 - smoothstep(0.45, 0.5, d);
           if (circleMask <= 0.0) discard;
@@ -126,7 +148,23 @@ class DofPointsMaterial extends THREE.ShaderMaterial {
   }
 }
 
-// Simulation material that keeps the particle motion looping
+// Generate initial positions on a plane
+function getPlane(count, components, size = 512, scale = 1.0) {
+  const length = count * components;
+  const data = new Float32Array(length);
+  for (let i = 0; i < count; i++) {
+    const i4 = i * components;
+    const x = (i % size) / (size - 1);
+    const z = Math.floor(i / size) / (size - 1);
+    data[i4 + 0] = (x - 0.5) * 2 * scale;
+    data[i4 + 1] = 0;
+    data[i4 + 2] = (z - 0.5) * 2 * scale;
+    data[i4 + 3] = 1.0;
+  }
+  return data;
+}
+
+// Simulation material
 class SimulationMaterial extends THREE.ShaderMaterial {
   constructor(scale = 10.0) {
     const positionsTexture = new THREE.DataTexture(
@@ -181,25 +219,7 @@ class SimulationMaterial extends THREE.ShaderMaterial {
   }
 }
 
-// Generate initial positions on a plane
-function getPlane(count, components, size = 512, scale = 1.0) {
-  const length = count * components;
-  const data = new Float32Array(length);
-
-  for (let i = 0; i < count; i++) {
-    const i4 = i * components;
-    const x = (i % size) / (size - 1);
-    const z = Math.floor(i / size) / (size - 1);
-    data[i4 + 0] = (x - 0.5) * 2 * scale;
-    data[i4 + 1] = 0;
-    data[i4 + 2] = (z - 0.5) * 2 * scale;
-    data[i4 + 3] = 1.0;
-  }
-
-  return data;
-}
-
-// Vignette shader for subtle edges
+// Vignette shader
 export const VignetteShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -228,7 +248,7 @@ export const VignetteShader = {
   `,
 };
 
-// Particles simulation + render loop
+// Particles component
 function Particles({
   speed,
   aperture,
@@ -249,10 +269,7 @@ function Particles({
   const [isRevealing, setIsRevealing] = useState(true);
   const revealDuration = 3.5;
 
-  const simulationMaterial = useMemo(
-    () => new SimulationMaterial(planeScale),
-    [planeScale]
-  );
+  const simulationMaterial = useMemo(() => new SimulationMaterial(planeScale), [planeScale]);
 
   const target = useFBO(size, size, {
     minFilter: THREE.NearestFilter,
@@ -264,37 +281,14 @@ function Particles({
   const dofPointsMaterial = useMemo(() => {
     const m = new DofPointsMaterial();
     m.uniforms.positions.value = target.texture;
-    m.uniforms.initialPositions.value =
-      simulationMaterial.uniforms.positions.value;
+    m.uniforms.initialPositions.value = simulationMaterial.uniforms.positions.value;
     return m;
   }, [simulationMaterial, target.texture]);
 
   const [scene] = useState(() => new THREE.Scene());
-  const [camera] = useState(
-    () => new THREE.OrthographicCamera(-1, 1, 1, -1, 1 / Math.pow(2, 53), 1)
-  );
-  const [positions] = useState(
-    () =>
-      new Float32Array([
-        -1, -1, 0,
-        1, -1, 0,
-        1,  1, 0,
-        -1, -1, 0,
-        1,  1, 0,
-        -1,  1, 0,
-      ])
-  );
-  const [uvs] = useState(
-    () =>
-      new Float32Array([
-        0, 1,
-        1, 1,
-        1, 0,
-        0, 1,
-        1, 0,
-        0, 0,
-      ])
-  );
+  const [camera] = useState(() => new THREE.OrthographicCamera(-1, 1, 1, -1, 1 / Math.pow(2, 53), 1));
+  const [positions] = useState(() => new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0]));
+  const [uvs] = useState(() => new Float32Array([0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0]));
 
   const particles = useMemo(() => {
     const length = size * size;
@@ -335,13 +329,7 @@ function Particles({
     dofPointsMaterial.uniforms.uFocus.value = focus;
     dofPointsMaterial.uniforms.uBlur.value = aperture;
 
-    easing.damp(
-      dofPointsMaterial.uniforms.uTransition,
-      "value",
-      introspect ? 1.0 : 0.0,
-      introspect ? 0.35 : 0.2,
-      delta
-    );
+    easing.damp(dofPointsMaterial.uniforms.uTransition, "value", introspect ? 1.0 : 0.0, introspect ? 0.35 : 0.2, delta);
 
     simulationMaterial.uniforms.uTime.value = currentTime;
     simulationMaterial.uniforms.uNoiseScale.value = noiseScale;
@@ -359,16 +347,12 @@ function Particles({
       {createPortal(
         <mesh material={simulationMaterial}>
           <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              args={[positions, 3]}
-            />
+            <bufferAttribute attach="attributes-position" args={[positions, 3]} />
             <bufferAttribute attach="attributes-uv" args={[uvs, 2]} />
           </bufferGeometry>
         </mesh>,
         scene
       )}
-
       <points material={dofPointsMaterial} {...props}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[particles, 3]} />
@@ -378,7 +362,27 @@ function Particles({
   );
 }
 
-// Exported background ready for the hero
+// Fallback background when WebGL fails
+const FallbackBackground = ({ accentColors, gridOpacity }) => (
+  <>
+    <div
+      className="absolute inset-0 opacity-70"
+      style={{
+        backgroundImage: `radial-gradient(circle at 30% 40%, ${accentColors.a}, transparent 35%), radial-gradient(circle at 75% 20%, ${accentColors.b}, transparent 30%), radial-gradient(circle at 60% 75%, ${accentColors.c}, transparent 35%)`,
+      }}
+    />
+    <div
+      className="absolute inset-0"
+      style={{
+        backgroundImage: "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
+        backgroundSize: "140px 140px",
+        opacity: gridOpacity,
+      }}
+    />
+  </>
+);
+
+// Main component
 const HeroWebGLBackground = ({
   hovering = false,
   className,
@@ -390,83 +394,58 @@ const HeroWebGLBackground = ({
   },
   gridOpacity = 0.35,
 }) => {
-  const speed = 1.5;
-  const noiseScale = 0.6;
-  const noiseIntensity = 0.52;
-  const timeScale = 1.0;
-  const focus = 3.8;
-  const aperture = 1.79;
-  const pointSize = 7.5;
-  const opacity = 0.8;
-  const planeScale = 10.0;
-  const size = 512;
-  const vignetteDarkness = 1.5;
-  const vignetteOffset = 0.4;
-  const useManualTime = false;
-  const manualTime = 0;
-
   return (
     <div
       aria-hidden
-      className={cn(
-        "pointer-events-none absolute inset-0 z-0 overflow-hidden",
-        className
-      )}>
+      className={cn("pointer-events-none absolute inset-0 z-0 overflow-hidden", className)}
+    >
       <div
         className="absolute inset-0 opacity-70"
         style={{
-          backgroundImage:
-            `radial-gradient(circle at 30% 40%, ${accentColors.a}, transparent 35%), radial-gradient(circle at 75% 20%, ${accentColors.b}, transparent 30%), radial-gradient(circle at 60% 75%, ${accentColors.c}, transparent 35%)`,
+          backgroundImage: `radial-gradient(circle at 30% 40%, ${accentColors.a}, transparent 35%), radial-gradient(circle at 75% 20%, ${accentColors.b}, transparent 30%), radial-gradient(circle at 60% 75%, ${accentColors.c}, transparent 35%)`,
         }}
       />
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
+          backgroundImage: "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
           backgroundSize: "140px 140px",
           opacity: gridOpacity,
         }}
       />
 
-      <Canvas
-        camera={{
-          position: [
-            1.2629783123314589,
-            2.664606471394044,
-            -1.8178993743288914,
-          ],
-          fov: 50,
-          near: 0.01,
-          far: 300,
-        }}
-        style={{ width: "100%", height: "100%" }}>
-        <color attach="background" args={[bgColor]} />
-
-        <Particles
-          speed={speed}
-          aperture={aperture}
-          focus={focus}
-          size={size}
-          noiseScale={noiseScale}
-          noiseIntensity={noiseIntensity}
-          timeScale={timeScale}
-          pointSize={pointSize}
-          opacity={opacity}
-          planeScale={planeScale}
-          useManualTime={useManualTime}
-          manualTime={manualTime}
-          introspect={hovering}
-        />
-
-        <Effects multisampling={0} disableGamma>
-          <shaderPass
-            args={[VignetteShader]}
-            uniforms-darkness-value={vignetteDarkness}
-            uniforms-offset-value={vignetteOffset}
+      <WebGLErrorBoundary fallback={<FallbackBackground accentColors={accentColors} gridOpacity={gridOpacity} />}>
+        <Canvas
+          camera={{ position: [1.26, 2.66, -1.82], fov: 50, near: 0.01, far: 300 }}
+          style={{ width: "100%", height: "100%" }}
+          onCreated={({ gl }) => {
+            gl.domElement.addEventListener('webglcontextlost', (e) => {
+              e.preventDefault();
+              console.warn('WebGL context lost');
+            });
+          }}
+        >
+          <color attach="background" args={[bgColor]} />
+          <Particles
+            speed={1.0}
+            aperture={1.79} 
+            focus={3.8}
+            size={512}
+            noiseScale={0.6}
+            noiseIntensity={0.52}
+            timeScale={1.0}
+            pointSize={10.0}
+            opacity={0.8}
+            planeScale={10.0}
+            useManualTime={false}
+            manualTime={0}
+            introspect={hovering}
           />
-        </Effects>
-      </Canvas>
+          <Effects multisampling={0} disableGamma>
+            <shaderPass args={[VignetteShader]} uniforms-darkness-value={1.5} uniforms-offset-value={0.4} />
+          </Effects>
+        </Canvas>
+      </WebGLErrorBoundary>
     </div>
   );
 };

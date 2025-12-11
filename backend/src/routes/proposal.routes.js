@@ -36,9 +36,13 @@ proposalRouter.patch(
   updateProposalStatus
 );
 
+const deleteProposalSchema = z.object({
+  params: z.object({ id: z.string().min(1) })
+});
+
 proposalRouter.delete(
   "/:id",
   requireAuth,
-  validateResource({ params: z.object({ id: z.string().min(1) }) }),
+  validateResource(deleteProposalSchema),
   deleteProposal
 );

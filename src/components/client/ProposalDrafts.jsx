@@ -46,8 +46,20 @@ const loadDrafts = () => {
     if (!raw) return;
     const parsed = parseDraftValue(raw);
     if (!parsed?.content && !parsed?.summary) return;
-    // Only show proposals that were explicitly saved (have savedAt or isSavedDraft flag)
-    if (!parsed.savedAt && !parsed.isSavedDraft) return;
+    
+    // CRITICAL: Only show proposals that were explicitly saved
+    // Must have BOTH savedAt AND isSavedDraft to be considered a valid draft
+    // This prevents auto-generated proposals from appearing in drafts
+    const isExplicitlySaved = Boolean(parsed.savedAt) && Boolean(parsed.isSavedDraft);
+    
+    if (!isExplicitlySaved) {
+      // Clean up proposals that don't have proper save flags
+      // This handles legacy data that might be lingering
+      console.log(`Cleaning up unsaved proposal from ${key}`);
+      window.localStorage.removeItem(key);
+      return;
+    }
+    
     const content = (parsed.content || parsed.summary || "").trim();
     const title =
       parsed.projectTitle ||
@@ -86,6 +98,9 @@ const saveDraftToStorage = (storageKey, draft) => {
     content: draft.content,
     summary: draft.content,
     updatedAt: new Date().toISOString(),
+    // Ensure both flags are maintained when saving edits
+    savedAt: draft.raw?.savedAt || new Date().toISOString(),
+    isSavedDraft: true,
   };
   window.localStorage.setItem(storageKey, JSON.stringify(payload));
 };
@@ -222,8 +237,30 @@ const ProposalDraftsContent = () => {
   };
 
   const handleDelete = (draft) => {
+    // Delete from the specific storage key
     deleteDraftFromStorage(draft.storageKey);
-    setDrafts((prev) => prev.filter((d) => d.storageKey !== draft.storageKey));
+    
+    // Also delete from all known storage keys to ensure complete cleanup
+    STORAGE_KEYS.forEach((key) => {
+      const raw = window.localStorage.getItem(key);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          // Check if this is the same draft (by comparing content or savedAt)
+          if (parsed.savedAt === draft.raw?.savedAt || 
+              parsed.content === draft.content ||
+              parsed.summary === draft.content) {
+            window.localStorage.removeItem(key);
+          }
+        } catch {
+          // If parse fails, skip
+        }
+      }
+    });
+    
+    // Update state to remove the draft from the list
+    setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+    toast.success("Draft deleted successfully");
   };
 
   const handleSave = () => {
@@ -245,6 +282,9 @@ const handleRestore = (draft, navigate) => {
     content: draft.content,
     summary: draft.content,
     updatedAt: new Date().toISOString(),
+    // Ensure both flags are explicitly set for restored drafts
+    savedAt: draft.raw?.savedAt || new Date().toISOString(),
+    isSavedDraft: true,
   };
   window.localStorage.setItem("markify:savedProposal", JSON.stringify(payload));
   window.localStorage.setItem("savedProposal", JSON.stringify(payload));

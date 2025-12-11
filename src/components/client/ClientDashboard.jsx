@@ -58,12 +58,13 @@ const loadSavedProposalFromStorage = () => {
     if (!rawValue) continue;
     try {
       const parsed = JSON.parse(rawValue);
-      // Only return if explicitly saved (has savedAt or isSavedDraft flag)
-      if (parsed.savedAt || parsed.isSavedDraft) {
+      // Load any valid proposal for the Dashboard view
+      // The Drafts page has its own stricter filtering for saved drafts
+      if (parsed && (parsed.content || parsed.summary || parsed.projectTitle)) {
         return parsed;
       }
     } catch {
-      // If can't parse, skip (not a valid saved proposal)
+      // If can't parse, skip
       continue;
     }
   }
@@ -845,8 +846,17 @@ const ClientDashboardContent = () => {
     if (!savedProposal) {
       return;
     }
-    persistSavedProposalToStorage(savedProposal);
+    // Ensure both flags are set so proposal appears in drafts
+    const proposalWithFlags = {
+      ...savedProposal,
+      savedAt: savedProposal.savedAt || new Date().toISOString(),
+      isSavedDraft: true,
+      updatedAt: new Date().toISOString(),
+    };
+    persistSavedProposalToStorage(proposalWithFlags);
+    setSavedProposal(proposalWithFlags);
     setProposalDeliveryState("saved");
+    toast.success("Proposal saved to drafts!");
   };
 
   const handleSendProposal = () => {

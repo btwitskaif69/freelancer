@@ -294,6 +294,12 @@ export const initSocket = (server) => {
             }
           });
 
+          // Update conversation timestamp for sorting
+          await prisma.chatConversation.update({
+            where: { id: conversation.id },
+            data: { updatedAt: new Date() }
+          });
+
             io.to(conversation.id).emit(
               "chat:message",
               serializeMessage(userMessage)

@@ -286,8 +286,8 @@ const FreelancerChatContent = () => {
             serviceKey: sharedKey,
             // Add timestamp for sorting - use proposal's updatedAt or createdAt
             serviceKey: sharedKey,
-            // Add timestamp for sorting - use proposal's updatedAt or createdAt
-            lastActivity: new Date(item.updatedAt || item.createdAt || 0).getTime(),
+            // Add timestamp for sorting - use backend provided lastActivity if available
+            lastActivity: new Date(item.lastActivity || item.updatedAt || item.createdAt || 0).getTime(),
             unreadCount: 0
           });
         }

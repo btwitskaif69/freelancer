@@ -78,7 +78,37 @@ export const listProposals = asyncHandler(async (req, res) => {
     orderBy: { createdAt: "desc" }
   });
 
-  res.json({ data: proposals });
+  // Fetch chat conversations to get latest activity
+  const serviceKeys = proposals.map(p => {
+    const ownerId = p.project.ownerId;
+    const freelancerId = p.freelancerId;
+    return `CHAT:${ownerId}:${freelancerId}`;
+  });
+
+  const conversations = await prisma.chatConversation.findMany({
+    where: { service: { in: serviceKeys } },
+    select: { service: true, updatedAt: true }
+  });
+
+  const conversationMap = new Map();
+  conversations.forEach(c => {
+    if (c.service) conversationMap.set(c.service, c.updatedAt);
+  });
+
+  const proposalsWithActivity = proposals.map(p => {
+    const key = `CHAT:${p.project.ownerId}:${p.freelancerId}`;
+    const chatUpdated = conversationMap.get(key);
+    // Use the later of proposal update or chat update
+    const lastActivity = chatUpdated ? new Date(chatUpdated) : new Date(p.updatedAt);
+    return { ...p, lastActivity };
+  });
+
+  // Sort by last activity descending
+  const sortedProposals = proposalsWithActivity.sort((a, b) => 
+    b.lastActivity.getTime() - a.lastActivity.getTime()
+  );
+
+  res.json({ data: sortedProposals });
 });
 
 export const deleteProposal = asyncHandler(async (req, res) => {

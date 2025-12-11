@@ -122,7 +122,7 @@ const ProjectCard = ({ project }) => {
                 Budget
               </p>
               <p className="text-2xl font-semibold text-foreground">
-                {budgetValue ? `$${budgetValue.toLocaleString()}` : "TBD"}
+                {budgetValue ? `₹${Math.floor(budgetValue * 0.7).toLocaleString()}` : "TBD"}
               </p>
             </div>
             <div>

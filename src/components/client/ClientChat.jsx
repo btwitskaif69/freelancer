@@ -80,7 +80,7 @@ const ChatArea = ({
 
       <div className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-6 py-4">
         {messages.map((message, index) => {
-          const isSelf = (message.senderId && currentUser?.id && message.senderId == currentUser.id) || message.senderRole === "CLIENT";
+          const isSelf = (message.senderId && currentUser?.id && String(message.senderId) === String(currentUser.id)) || message.senderRole === "CLIENT";
           const isAssistant = message.role === "assistant";
           const align = isAssistant || !isSelf ? "justify-start" : "justify-end";
           const isDeleted = message.deleted || message.isDeleted;
@@ -447,10 +447,8 @@ const ClientChatContent = () => {
        if (cid !== conversationId) return;
        setMessages(prev => prev.map(msg => {
          // Mark all messages sent by ME (or as 'user') as read if reader is someone else
-         // Simplification: just mark anything unread as read if it's not the reader's own message
-         // But effectively, if we get a receipt, it implies the other person read everything visible.
-         // We'll update independent of who sent it for consistency, or check senderId.
-         if (msg.senderId === user?.id || msg.role === "user") { 
+         // Using String() to ensure ID comparison works even if one is number/string
+         if (String(msg.senderId) === String(user?.id) || msg.role === "user") { 
              return { ...msg, readAt: readAt || new Date().toISOString() };
          }
          return msg;
@@ -511,7 +509,7 @@ const ClientChatContent = () => {
 
 
       // If we are viewing this conversation, mark the new message as read immediately
-      if (message.conversationId === conversationId && message.senderId !== user?.id) {
+      if (message.conversationId === conversationId && String(message.senderId) !== String(user?.id)) {
          socket.emit("chat:read", { conversationId, userId: user?.id });
       }
     });

@@ -23,7 +23,6 @@ import {
   getNextHumanizedQuestion,
   shouldGenerateProposal,
   generateProposalFromState,
-  getOpeningMessage,
 } from "../lib/conversation-state.js";
 
 
@@ -853,6 +852,65 @@ To customize this proposal, please use the Edit Proposal option.
 If NO (budget or timeline too low), DO NOT generate proposal. Instead, show the budget/timeline message with alternatives.`;
 };
 
+// AI-powered proposal rewriting function
+const rewriteProposalWithAI = async (rawProposal, apiKey) => {
+  try {
+    const openai = new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: apiKey,
+      defaultHeaders: {
+        "HTTP-Referer": defaultReferer,
+        "X-Title": "Freelancer Platform",
+      },
+    });
+
+    // Extract the project overview section to rewrite
+    const overviewMatch = rawProposal.match(/PROJECT OVERVIEW\n═+\n([\s\S]*?)\n\nWebsite Type:/);
+    if (!overviewMatch) {
+      return rawProposal; // Return unchanged if pattern not found
+    }
+
+    const originalOverview = overviewMatch[1].trim();
+
+    // Use AI to rewrite the description
+    const rewriteResponse = await openai.chat.completions.create({
+      model: env.OPENROUTER_MODEL || "openai/gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional proposal writer. Rewrite the following project description to be:
+1. Professional and formal
+2. Fix any spelling or grammar errors
+3. Keep it concise (2-3 sentences max)
+4. Keep the project name if mentioned
+5. Do NOT add any extra details, just clean up what's given
+6. Do NOT use quotes around the response
+
+Return ONLY the rewritten description, nothing else.`
+        },
+        {
+          role: "user",
+          content: originalOverview
+        }
+      ],
+      max_tokens: 200,
+      temperature: 0.3,
+    });
+
+    const rewrittenOverview = rewriteResponse?.choices?.[0]?.message?.content?.trim();
+
+    if (rewrittenOverview) {
+      // Replace the original overview with the rewritten one
+      return rawProposal.replace(originalOverview, rewrittenOverview);
+    }
+
+    return rawProposal;
+  } catch (error) {
+    console.error("Error rewriting proposal with AI:", error.message);
+    return rawProposal; // Return original if AI fails
+  }
+};
+
 export const generateChatReply = async ({
   message,
   service,
@@ -878,21 +936,32 @@ export const generateChatReply = async ({
 
   const systemContent = buildSystemPrompt(service || "");
   const safeHistory = Array.isArray(history) ? history.slice(-50) : [];
+  const normalizedMessage = (message || "").trim();
+  const historyForStateMachine = (() => {
+    if (!safeHistory.length) return safeHistory;
+    const last = safeHistory[safeHistory.length - 1];
+    if (
+      last?.role === "user" &&
+      (last.content || "").trim() === normalizedMessage
+    ) {
+      return safeHistory.slice(0, -1);
+    }
+    return safeHistory;
+  })();
 
   // ======== STATE MACHINE FLOW (NO AI NEEDED FOR BASIC QUESTIONS) ========
   // Use deterministic state machine for standard question flow
   try {
-    // Handle first message (no history) - return opening + first question
-    if (safeHistory.length === 0) {
+    // Handle first message (no history) - ask first question
+    if (historyForStateMachine.length === 0) {
       console.log("🎬 State Machine: Starting new conversation");
       const state = buildConversationState([], service);
-      const openingMsg = getOpeningMessage(service);
       const firstQuestion = getNextHumanizedQuestion(state);
-      return `${openingMsg}\n\n${firstQuestion}`;
+      return firstQuestion;
     }
 
     // Build state from conversation history
-    const state = buildConversationState(safeHistory, service);
+    const state = buildConversationState(historyForStateMachine, service);
     console.log(`📊 State Machine: Step ${state.currentStep}, Collected: ${Object.keys(state.collectedData).join(", ")}`);
 
     // Process user's current answer
@@ -901,7 +970,9 @@ export const generateChatReply = async ({
     // Check if ready for proposal
     if (shouldGenerateProposal(updatedState)) {
       console.log("🎯 State Machine: Generating proposal from collected data");
-      return generateProposalFromState(updatedState);
+      const rawProposal = generateProposalFromState(updatedState);
+      // Use AI to rewrite the proposal description formally
+      return await rewriteProposalWithAI(rawProposal, apiKey);
     }
 
     // Get next humanized question
@@ -914,7 +985,8 @@ export const generateChatReply = async ({
     // If no next question but not ready for proposal, something's wrong
     // Return a generic fallback instead of falling to AI
     console.log("⚠️ State Machine: No next question, generating proposal anyway");
-    return generateProposalFromState(updatedState);
+    const rawProposal = generateProposalFromState(updatedState);
+    return await rewriteProposalWithAI(rawProposal, apiKey);
   } catch (stateError) {
     console.log("⚠️ State Machine: Error -", stateError.message);
     // Return a simple error message instead of falling to AI
@@ -1371,7 +1443,7 @@ export const addConversationMessage = asyncHandler(async (req, res) => {
     if (!skipAssistant) {
       const dbHistory = Array.isArray(clientHistory)
         ? clientHistory.map(toHistoryMessage)
-        : listMessages(conversation.id, 40).map(toHistoryMessage);
+        : listMessages(conversation.id, 100).map(toHistoryMessage);
       const contextHint = summarizeContext(dbHistory);
 
       try {
@@ -1492,7 +1564,7 @@ export const addConversationMessage = asyncHandler(async (req, res) => {
     const recentMessages = await prisma.chatMessage.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: "asc" },
-      take: 50,
+      take: 100,
     });
 
     const dbHistory = recentMessages.map(toHistoryMessage);

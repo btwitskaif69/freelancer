@@ -249,7 +249,7 @@ export const initSocket = (server) => {
 
             if (skipAssistant) return;
 
-            const dbHistory = listMessages(conversation.id, 20);
+            const dbHistory = listMessages(conversation.id, 100);
 
             let assistantReply = null;
             try {

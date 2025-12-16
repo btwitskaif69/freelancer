@@ -480,6 +480,7 @@ const ChatDialog = ({ isOpen, onClose, service }) => {
                   let cleanContent = msg.content
                     ?.replace(/\[SUGGESTIONS:[\s\S]*?\]/i, "")
                     .replace(/\[MULTI_SELECT:[\s\S]*?\]/i, "")
+                    .replace(/\[QUESTION_KEY:[\s\S]*?\]/i, "")
                     .replace(/\[PROPOSAL_DATA\][\s\S]*?\[\/PROPOSAL_DATA\]/, "")
                     .trim();
 

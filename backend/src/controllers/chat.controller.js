@@ -934,7 +934,6 @@ export const generateChatReply = async ({
     },
   });
 
-  const systemContent = buildSystemPrompt(service || "");
   const safeHistory = Array.isArray(history) ? history.slice(-50) : [];
   const normalizedMessage = (message || "").trim();
   const historyForStateMachine = (() => {
@@ -949,202 +948,89 @@ export const generateChatReply = async ({
     return safeHistory;
   })();
 
-  // ======== STATE MACHINE FLOW (NO AI NEEDED FOR BASIC QUESTIONS) ========
-  // Use deterministic state machine for standard question flow
-  try {
-    // Handle first message (no history) - ask first question
-    if (historyForStateMachine.length === 0) {
-      console.log("🎬 State Machine: Starting new conversation");
-      const state = buildConversationState([], service);
-      const firstQuestion = getNextHumanizedQuestion(state);
-      return firstQuestion;
-    }
+  const state = buildConversationState(historyForStateMachine, service);
+  const updatedState = processUserAnswer(state, normalizedMessage);
 
-    // Build state from conversation history
-    const state = buildConversationState(historyForStateMachine, service);
-    console.log(`📊 State Machine: Step ${state.currentStep}, Collected: ${Object.keys(state.collectedData).join(", ")}`);
+  const answerServiceQuestionWithAI = async () => {
+    const known = Object.entries(updatedState.collectedData || {})
+      .filter(([, v]) => v && v !== "[skipped]")
+      .slice(0, 12)
+      .map(([k, v]) => `${k}: ${String(v).slice(0, 160)}`)
+      .join("\n");
 
-    // Process user's current answer
-    const updatedState = processUserAnswer(state, message);
+    const messages = [
+      {
+        role: "system",
+        content:
+          `You are a helpful assistant for the service "${service || "General"}" on a freelancer platform. ` +
+          `Answer the user's question in 1-5 concise sentences. ` +
+          `Do NOT ask follow-up questions and do NOT include any extra questions in your answer. ` +
+          `Do not output any bracket tags like [SUGGESTIONS] or [PROPOSAL_DATA].`,
+      },
+      {
+        role: "system",
+        content: `Service context: ${getServiceDetails(service || "")}`,
+      },
+      {
+        role: "system",
+        content: `Known requirements so far (may be incomplete):\n${known || "None yet."}`,
+      },
+      {
+        role: "user",
+        content: normalizedMessage,
+      },
+    ];
 
-    // Check if ready for proposal
-    if (shouldGenerateProposal(updatedState)) {
-      console.log("🎯 State Machine: Generating proposal from collected data");
-      const rawProposal = generateProposalFromState(updatedState);
-      // Use AI to rewrite the proposal description formally
-      return await rewriteProposalWithAI(rawProposal, apiKey);
-    }
-
-    // Get next humanized question
-    const nextQuestion = getNextHumanizedQuestion(updatedState);
-    if (nextQuestion) {
-      console.log("💬 State Machine: Returning next question");
-      return nextQuestion;
-    }
-
-    // If no next question but not ready for proposal, something's wrong
-    // Return a generic fallback instead of falling to AI
-    console.log("⚠️ State Machine: No next question, generating proposal anyway");
-    const rawProposal = generateProposalFromState(updatedState);
-    return await rewriteProposalWithAI(rawProposal, apiKey);
-  } catch (stateError) {
-    console.log("⚠️ State Machine: Error -", stateError.message);
-    // Return a simple error message instead of falling to AI
-    return "I'm having trouble processing that. Could you try again?";
-  }
-  // ======== END STATE MACHINE FLOW ========
-
-  // IMPORTANT: Include the current message in context calculation
-  const historyWithCurrentMessage = [
-    ...safeHistory,
-    { role: "user", content: message }
-  ];
-
-
-  // ======== SMART MESSAGE PARSING ========
-  // Check if user provided all info in ONE message (skip questions entirely)
-  // This only triggers on the FIRST message (no history) or very early in conversation
-  const isEarlyConversation = safeHistory.filter(m => m.role === "assistant").length <= 1;
-
-  if (isEarlyConversation && message.length > 50) {
-    const extractedInfo = extractInfoFromMessage(message);
-
-    if (extractedInfo.hasEnoughInfo) {
-      console.log("🎯 Smart parsing: Detected comprehensive message, generating proposal directly!");
-      console.log("   Extracted:", {
-        budget: extractedInfo.budget,
-        timeline: extractedInfo.timeline,
-        techStack: extractedInfo.techStack,
-        projectType: extractedInfo.projectType
-      });
-
-      return generateDirectProposal(extractedInfo, service);
-    }
-  }
-  // ======== END SMART MESSAGE PARSING ========
-
-  // ======== DIRECT PROPOSAL GENERATION ========
-  // Check if we should generate proposal directly (bypass AI completely)
-  // This triggers when the last bot question was about timeline and user answered
-
-  // Find the last assistant message in history
-  let lastBotMessage = null;
-  for (let i = safeHistory.length - 1; i >= 0; i--) {
-    if (safeHistory[i].role === "assistant") {
-      lastBotMessage = safeHistory[i].content?.toLowerCase() || "";
-      break;
-    }
-  }
-
-  const isTimelineQuestion = lastBotMessage &&
-    (lastBotMessage.includes("timeline") || lastBotMessage.includes("go-live") || lastBotMessage.includes("timeframe"));
-
-  // Count how many exchanges we've had
-  const exchangeCount = safeHistory.filter(m => m.role === "assistant").length;
-
-  // If last question was timeline (step 11+) and this is the answer, generate proposal directly
-  if (isTimelineQuestion && exchangeCount >= 8) {
-    console.log("🚀 Timeline answered! Generating proposal directly...");
-
-    // Extract info from conversation
-    const allMessages = historyWithCurrentMessage;
-    const extractAnswer = (patterns) => {
-      for (let i = 0; i < allMessages.length - 1; i++) {
-        const bot = allMessages[i];
-        const user = allMessages[i + 1];
-        if (bot.role === "assistant" && user?.role === "user") {
-          const botContent = (bot.content || "").toLowerCase();
-          if (patterns.some(p => botContent.includes(p))) {
-            return user.content;
-          }
-        }
-      }
-      return null;
-    };
-
-    const name = extractAnswer(["first name", "your name"]) || "Client";
-    const company = extractAnswer(["company", "project name"]) || "Project";
-    const summary = extractAnswer(["what are you building", "in one line"]) || "Web application";
-    const features = extractAnswer(["essential features", "features"]) || "Core features";
-    const techStack = extractAnswer(["tech stack", "platform"]) || "React/Next.js";
-    const budget = extractAnswer(["budget", "inr"]) || "TBD";
-    const timeline = message; // Current message is the timeline answer
-
-    return `[PROPOSAL_DATA]
-PROJECT PROPOSAL
-
-Project: ${company}
-For: ${name}
-Tech Stack: ${techStack}
-
-Summary:
-${summary}
-
-Features Included:
-${features}
-
-Budget: INR ${budget}
-Timeline: ${timeline}
-
-Scope of Work:
-Phase 1: Discovery & Planning - Requirements gathering and technical architecture
-Phase 2: UI/UX Design - Wireframing, mockups, and design review
-Phase 3: Development - Core functionality and integrations
-Phase 4: Testing & Launch - QA and deployment
-
-Next Steps:
-1. Review and confirm this proposal
-2. Sign agreement and pay deposit
-3. Kickoff meeting to begin work
-
-To customize this proposal, please use the Edit Proposal option.
-[/PROPOSAL_DATA]`;
-  }
-  // ======== END DIRECT PROPOSAL GENERATION ========
-
-  const contextHintWithCurrent = summarizeContext(historyWithCurrentMessage);
-
-  const messages = [
-    { role: "system", content: systemContent },
-    { role: "system", content: contextHintWithCurrent },
-    ...safeHistory.map((msg) => ({
-      role: msg.role === "assistant" ? "assistant" : "user",
-      content: msg.content,
-    })),
-    { role: "user", content: message },
-  ];
-
-  let completion;
-  try {
-    completion = await openai.chat.completions.create({
-      model: env.OPENROUTER_MODEL,
-      messages,
-      max_tokens: MAX_COMPLETION_TOKENS,
-      temperature: 0.2,
-    });
-  } catch (error) {
-    if (error?.status === 429 && env.OPENROUTER_MODEL_FALLBACK) {
-      console.warn(
-        `Primary model ${env.OPENROUTER_MODEL} rate limited. Switching to fallback model ${env.OPENROUTER_MODEL_FALLBACK}...`
-      );
+    let completion;
+    try {
       completion = await openai.chat.completions.create({
-        model: env.OPENROUTER_MODEL_FALLBACK,
+        model: env.OPENROUTER_MODEL,
         messages,
-        max_tokens: MAX_COMPLETION_TOKENS,
+        max_tokens: 220,
         temperature: 0.2,
       });
-    } else {
-      console.error("Primary model failed with error:", error);
-      throw error;
+    } catch (error) {
+      if (error?.status === 429 && env.OPENROUTER_MODEL_FALLBACK) {
+        completion = await openai.chat.completions.create({
+          model: env.OPENROUTER_MODEL_FALLBACK,
+          messages,
+          max_tokens: 220,
+          temperature: 0.2,
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    return (
+      completion?.choices?.[0]?.message?.content
+        ?.trim()
+        ?.replace(/\*\*/g, "") || ""
+    );
+  };
+
+  let aiAnswer = "";
+  if (updatedState?.meta?.wasQuestion) {
+    try {
+      aiAnswer = await answerServiceQuestionWithAI();
+    } catch (error) {
+      console.error("Service Q&A failed:", error?.message || error);
+      aiAnswer = "";
     }
   }
 
-  const rawContent =
-    completion?.choices?.[0]?.message?.content ||
-    "I'm here-please share a bit more so I can prepare your quick proposal.";
+  if (shouldGenerateProposal(updatedState)) {
+    const rawProposal = generateProposalFromState(updatedState);
+    const rewritten = await rewriteProposalWithAI(rawProposal, apiKey);
+    return aiAnswer ? `${aiAnswer}\n\n${rewritten}` : rewritten;
+  }
 
-  // Clean the response: normalize proposal tags and remove any internal reasoning
-  return cleanAIResponse(normalizeProposalTags(rawContent));
+  const nextQuestion = getNextHumanizedQuestion(updatedState);
+  if (!nextQuestion) {
+    return aiAnswer || "Could you share a bit more detail?";
+  }
+
+  return aiAnswer ? `${aiAnswer}\n\n${nextQuestion}` : nextQuestion;
 };
 
 export const chatController = async (req, res) => {

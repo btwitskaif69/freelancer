@@ -18,6 +18,249 @@ export const SERVICE_QUESTIONS_MAP = Object.freeze(
     )
 );
 
+const QUESTION_KEY_TAG_REGEX = /\[QUESTION_KEY:\s*([^\]]+)\]/i;
+
+const normalizeText = (value = "") => (value || "").toString().trim();
+
+const getQuestionKeyFromAssistant = (value = "") => {
+    const match = normalizeText(value).match(QUESTION_KEY_TAG_REGEX);
+    return match ? match[1].trim() : null;
+};
+
+const withQuestionKeyTag = (text = "", key = "") => {
+    if (!key) return text;
+    if (QUESTION_KEY_TAG_REGEX.test(text)) return text;
+    return `${text}\n[QUESTION_KEY: ${key}]`;
+};
+
+const isGreetingMessage = (value = "") =>
+    /^(hi|hello|hey|hii+|yo|sup|what'?s up|whats up)\b/i.test(normalizeText(value));
+
+const isSkipMessage = (value = "") => {
+    const text = normalizeText(value).toLowerCase();
+    return text === "skip" || text === "done" || text === "na" || text === "n/a" || text.includes("skip");
+};
+
+const extractBudget = (value = "") => {
+    const text = normalizeText(value).replace(/\?/g, "");
+    if (!text) return null;
+    if (/^flexible$/i.test(text)) return "Flexible";
+
+    let match = text.match(/(?:\u20B9|inr|rs\.?|rupees?)\s*([\d,]+(?:\.\d+)?)\b/i);
+    if (match) return match[1].replace(/,/g, "");
+
+    match = text.match(/\b(\d+(?:\.\d+)?)\s*(k)\b/i);
+    if (match) return `${match[1]}k`;
+
+    match = text.match(/\b(\d+(?:\.\d+)?)\s*(l)\b/i);
+    if (match) return `${match[1]}L`;
+
+    match = text.match(/\b(\d+(?:\.\d+)?)\s*lakh(s)?\b/i);
+    if (match) return `${match[1]} lakh`;
+
+    match = text.match(/\b(\d{4,})\b/);
+    if (match && /(budget|cost|price|inr|\u20B9|rs|rupees?)/i.test(text)) return match[1];
+
+    return null;
+};
+
+const extractTimeline = (value = "") => {
+    const text = normalizeText(value).replace(/\?/g, "");
+    if (!text) return null;
+    if (/^flexible$/i.test(text)) return "Flexible";
+
+    let match = text.match(/\b(\d+\s*-\s*\d+)\s*(day|week|month|year)s?\b/i);
+    if (match) {
+        const range = match[1].replace(/\s*/g, "");
+        const unit = match[2].toLowerCase();
+        return `${range} ${unit}s`;
+    }
+
+    match = text.match(/\b(\d+)\s*(day|week|month|year)s?\b/i);
+    if (match) {
+        const count = parseInt(match[1], 10);
+        const unit = match[2].toLowerCase();
+        return `${count} ${unit}${count === 1 ? "" : "s"}`;
+    }
+
+    if (/\b(asap|urgent|immediately)\b/i.test(text)) return text;
+    if (/\bby\b/i.test(text)) return text;
+    if (/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b/i.test(text)) return text;
+
+    return null;
+};
+
+const isBareBudgetAnswer = (value = "") => {
+    const text = normalizeText(value)
+        .replace(/\?/g, "")
+        .toLowerCase();
+    if (!text) return false;
+    if (text === "flexible") return true;
+
+    // Examples: "60000", "₹60,000", "INR 60000", "60k", "1 lakh", "Under ₹120,000"
+    if (/^under\s+(?:\u20B9|inr|rs\.?|rupees?)?\s*\d[\d,]*(?:\.\d+)?\s*(?:k|l|lakh)?\s*$/i.test(text)) {
+        return true;
+    }
+
+    return /^(?:(?:\u20B9|inr|rs\.?|rupees?)\s*)?\d[\d,]*(?:\.\d+)?\s*(?:k|l|lakh)?\s*$/.test(text);
+};
+
+const isBareTimelineAnswer = (value = "") => {
+    const text = normalizeText(value)
+        .replace(/\?/g, "")
+        .toLowerCase();
+    if (!text) return false;
+    if (text === "flexible") return true;
+    if (/^(asap|urgent|immediately|this week|next week|next month)$/i.test(text)) return true;
+    if (/^\d+\s*-\s*\d+\s*(day|week|month|year)s?$/.test(text)) return true;
+    return /^\d+\s*(day|week|month|year)s?$/.test(text);
+};
+
+const isUserQuestion = (value = "") => {
+    const text = normalizeText(value);
+    if (!text) return false;
+    if (text.includes("?")) {
+        const withoutMarks = text.replace(/\?/g, "");
+        // Treat pure budget/timeline inputs as answers even if a user typed '?'. Otherwise it's a question.
+        if (isBareBudgetAnswer(withoutMarks) || isBareTimelineAnswer(withoutMarks)) return false;
+        return true;
+    }
+    return /^(can|could|would|should|do|does|is|are|will|may|what|why|how|when|where|which)\b/i.test(text);
+};
+
+const isLikelyName = (value = "") => {
+    const text = normalizeText(value).replace(/\?/g, "");
+    if (!text) return false;
+    if (text.length > 40) return false;
+    if (/\bhttps?:\/\//i.test(text) || /\bwww\./i.test(text)) return false;
+    if (text.includes("@")) return false;
+    if (/\d{2,}/.test(text)) return false;
+    if (/(budget|timeline|website|app|project|need|want|build|looking)\b/i.test(text)) return false;
+    return /[a-zA-Z]/.test(text);
+};
+
+const extractName = (value = "") => {
+    const text = normalizeText(value).replace(/\?/g, "");
+    if (!text) return null;
+    const match = text.match(/\bmy name is\s+(.+)$/i);
+    if (match) return match[1].trim();
+    return isLikelyName(text) ? text.trim() : null;
+};
+
+const getCurrentStepFromCollected = (questions = [], collectedData = {}) => {
+    for (let i = 0; i < questions.length; i++) {
+        const key = questions[i]?.key;
+        if (!key) continue;
+        const value = collectedData[key];
+        if (value === undefined || value === null || normalizeText(value) === "") {
+            return i;
+        }
+    }
+    return questions.length;
+};
+
+const extractKnownFieldsFromMessage = (questions = [], message = "", collectedData = {}) => {
+    const text = normalizeText(message);
+    if (!text || isGreetingMessage(text)) return {};
+
+    const keys = new Set(questions.map((q) => q.key));
+    const updates = {};
+
+    if (keys.has("budget")) {
+        const budget = extractBudget(text);
+        if (budget) updates.budget = budget;
+    }
+
+    if (keys.has("timeline")) {
+        const timeline = extractTimeline(text);
+        if (timeline) updates.timeline = timeline;
+    }
+
+    if (keys.has("name") && !collectedData.name) {
+        const name = extractName(text);
+        if (name) updates.name = name;
+    }
+
+    const descriptionKey =
+        keys.has("description")
+            ? "description"
+            : keys.has("summary")
+                ? "summary"
+                : keys.has("vision")
+                    ? "vision"
+                    : null;
+
+    if (descriptionKey && !collectedData[descriptionKey] && !isUserQuestion(text)) {
+        const looksDescriptive =
+            text.length >= 25 &&
+            /(need|looking|build|create|develop|want|require|make)\b/i.test(text);
+        if (looksDescriptive) {
+            updates[descriptionKey] = text;
+        }
+    }
+
+    return updates;
+};
+
+const extractAnswerForQuestion = (question, rawMessage) => {
+    const message = normalizeText(rawMessage);
+    if (!question || !message) return null;
+    if (isGreetingMessage(message)) return null;
+    if (isSkipMessage(message)) return "[skipped]";
+
+    switch (question.key) {
+        case "budget": {
+            return extractBudget(message);
+        }
+        case "timeline": {
+            return extractTimeline(message);
+        }
+        case "name": {
+            return extractName(message);
+        }
+        default: {
+            if (Array.isArray(question.suggestions) && question.suggestions.length) {
+                const normalized = message
+                    .toLowerCase()
+                    .replace(/[?.!]+$/g, "")
+                    .trim();
+                const matched = question.suggestions.find((opt) => {
+                    const candidate = normalizeText(opt)
+                        .toLowerCase()
+                        .replace(/[?.!]+$/g, "")
+                        .trim();
+                    return candidate === normalized;
+                });
+                if (matched) return matched;
+            }
+
+            if (isUserQuestion(message)) {
+                const qIndex = message.indexOf("?");
+                const beforeQuestion = qIndex >= 0 ? message.slice(0, qIndex).trim() : "";
+                const cutAt = Math.max(
+                    beforeQuestion.lastIndexOf("."),
+                    beforeQuestion.lastIndexOf("!"),
+                    beforeQuestion.lastIndexOf("\n")
+                );
+                const candidate = (cutAt > -1
+                    ? beforeQuestion.slice(0, cutAt)
+                    : beforeQuestion
+                ).trim();
+
+                if (!candidate) return null;
+                if (isUserQuestion(candidate)) return null;
+                if (isBareBudgetAnswer(candidate) || isBareTimelineAnswer(candidate)) return null;
+                if (extractBudget(candidate) && candidate.length <= 30) return null;
+                if (extractTimeline(candidate) && candidate.length <= 30) return null;
+
+                return candidate;
+            }
+            return message;
+        }
+    }
+};
+
+
 /**
  * Build conversation state from message history
  * @param {Array} history - Array of {role, content} messages
@@ -26,76 +269,38 @@ export const SERVICE_QUESTIONS_MAP = Object.freeze(
  */
 export function buildConversationState(history, service) {
     const { questions } = getChatbot(service);
-
+    const safeHistory = Array.isArray(history) ? history : [];
     const collectedData = {};
 
-    // Simple approach: count assistant-user pairs to determine step
-    // Each valid pair = one question answered
-    let answeredCount = 0;
-
-    // Patterns that indicate an assistant message is asking a question (not just chatting)
-    const isQuestionMessage = (msg) => {
-        const content = (msg || "").toLowerCase();
-
-        // Exclude generic greetings even if they have "?"
-        if (content.includes("how can i help") || content.includes("what can i help")) {
-            return false;
-        }
-
-        // Must contain actual question indicators from our question templates
-        return content.includes("what's your") ||
-            content.includes("what is your") ||
-            content.includes("what should i call") ||
-            content.includes("company or project") ||
-            content.includes("what exactly are you") ||
-            content.includes("what's the vision") ||
-            content.includes("do you have") ||
-            content.includes("select all") ||
-            content.includes("what kind") ||
-            content.includes("what technology") ||
-            content.includes("tell me") ||
-            content.includes("where would") ||
-            content.includes("when do you") ||
-            content.includes("what integrations") ||
-            content.includes("what additional") ||
-            content.includes("designs or inspirations") ||
-            content.includes("deployed/hosted") ||
-            content.includes("domain name") ||
-            content.includes("budget") ||
-            content.includes("timeline") ||
-            content.includes("website ready");
-    };
-
-    for (let i = 0; i < history.length - 1; i++) {
-        const botMsg = history[i];
-        const userMsg = history[i + 1];
-
-        if (botMsg.role === "assistant" && userMsg?.role === "user") {
-            const botContent = botMsg.content || "";
-            const userAnswer = userMsg.content?.trim();
-
-            // Skip if bot message was not a question (e.g., "How can I help you?")
-            // Only count if it's an actual question from the flow
-            if (!isQuestionMessage(botContent)) {
-                continue;
-            }
-
-            // Skip greetings - don't count as answer to name question
-            const isGreeting = /^(hi|hello|hey|hii|hiii|yo|sup|what's up|whats up)$/i.test(userAnswer);
-
-            if (userAnswer && !isGreeting) {
-                // Map answer to the question at this step
-                const questionAtStep = questions[answeredCount];
-                if (questionAtStep) {
-                    collectedData[questionAtStep.key] = userAnswer;
-                }
-                answeredCount++;
-            }
+    // Extract structured fields even if the user answered out-of-sequence.
+    for (const msg of safeHistory) {
+        if (msg?.role === "user") {
+            Object.assign(
+                collectedData,
+                extractKnownFieldsFromMessage(questions, msg.content, collectedData)
+            );
         }
     }
 
-    // Current step is the next unanswered question
-    const currentStep = answeredCount;
+    // Map user replies to the exact question asked (tagged in assistant messages).
+    for (let i = 0; i < safeHistory.length - 1; i++) {
+        const botMsg = safeHistory[i];
+        const userMsg = safeHistory[i + 1];
+        if (botMsg?.role !== "assistant" || userMsg?.role !== "user") continue;
+
+        const askedKey = getQuestionKeyFromAssistant(botMsg.content);
+        if (!askedKey) continue;
+
+        const question = questions.find((q) => q.key === askedKey);
+        if (!question) continue;
+
+        const answer = extractAnswerForQuestion(question, userMsg.content);
+        if (answer !== null && answer !== undefined) {
+            collectedData[question.key] = answer;
+        }
+    }
+
+    const currentStep = getCurrentStepFromCollected(questions, collectedData);
 
     return {
         collectedData,
@@ -113,58 +318,39 @@ export function buildConversationState(history, service) {
  * @returns {Object} Updated state
  */
 export function processUserAnswer(state, message) {
-    const { collectedData, currentStep, questions } = state;
-    const currentQuestion = questions[currentStep];
+    const questions = Array.isArray(state?.questions) ? state.questions : [];
+    const collectedData = { ...(state?.collectedData || {}) };
+    const normalized = normalizeText(message);
 
-    console.log(`📝 processUserAnswer: currentStep=${currentStep}, currentQuestion=${currentQuestion?.key}, message="${message}"`);
+    Object.assign(
+        collectedData,
+        extractKnownFieldsFromMessage(questions, normalized, collectedData)
+    );
 
-    // Detect greetings - don't save as answer, just re-ask the question
-    const isGreeting = /^(hi|hello|hey|hii|hiii|yo|sup|what's up|whats up)$/i.test(message.trim());
+    const stepBefore = getCurrentStepFromCollected(questions, collectedData);
+    const currentQuestion = questions[stepBefore];
 
-    if (isGreeting) {
-        // Don't advance step for greetings
-        return {
-            ...state,
-            collectedData,
-            currentStep,  // Keep same step
-            isComplete: false,
-        };
-    }
-
-    // Direct timeline detection - if message looks like a timeline answer, store it
-    const isTimelineAnswer = /^\s*(?:\d+[-\s]?\d*\s*)?(?:week|month|day)s?\s*$/i.test(message.trim()) ||
-        /^flexible$/i.test(message.trim()) ||
-        /^1-2 weeks$/i.test(message.trim()) ||
-        /^1 month$/i.test(message.trim()) ||
-        /^2-3 months$/i.test(message.trim());
-
-    if (isTimelineAnswer && !collectedData.timeline) {
-        console.log(`⏰ Direct timeline detection: storing "${message}" as timeline`);
-        collectedData.timeline = message.trim();
-    }
-
-    if (currentQuestion && message.trim()) {
-        // Handle skip
-        if (message.toLowerCase().includes("skip") || message.toLowerCase() === "done") {
-            collectedData[currentQuestion.key] = "[skipped]";
-        } else {
-            collectedData[currentQuestion.key] = message.trim();
+    let answeredKey = null;
+    if (currentQuestion) {
+        const answer = extractAnswerForQuestion(currentQuestion, normalized);
+        if (answer !== null && answer !== undefined) {
+            collectedData[currentQuestion.key] = answer;
+            answeredKey = currentQuestion.key;
         }
-        console.log(`✅ Stored: ${currentQuestion.key} = "${message.trim()}"`);
-    } else {
-        console.log(`⚠️ currentQuestion is undefined or message empty`);
     }
 
-    const newStep = currentStep + 1;
-    const isComplete = newStep >= questions.length;
-
-    console.log(`📊 After process: newStep=${newStep}, questionsLength=${questions.length}, isComplete=${isComplete}`);
+    const currentStep = getCurrentStepFromCollected(questions, collectedData);
 
     return {
         ...state,
         collectedData,
-        currentStep: newStep,
-        isComplete: isComplete,
+        currentStep,
+        questions,
+        isComplete: currentStep >= questions.length,
+        meta: {
+            answeredKey,
+            wasQuestion: isUserQuestion(normalized),
+        },
     };
 }
 
@@ -181,13 +367,15 @@ export function getNextHumanizedQuestion(state) {
     }
 
     const question = questions[currentStep];
-    const templates = question.templates;
+    const templates = question.templates || [];
 
     // Pick random template for variety
-    let text = templates[Math.floor(Math.random() * templates.length)];
+    let text = templates.length
+        ? templates[Math.floor(Math.random() * templates.length)]
+        : "";
 
     // Replace placeholders like {name} with actual values
-    for (const [key, value] of Object.entries(collectedData)) {
+    for (const [key, value] of Object.entries(collectedData || {})) {
         text = text.replace(new RegExp(`\\{${key}\\}`, "gi"), value);
     }
 
@@ -197,7 +385,7 @@ export function getNextHumanizedQuestion(state) {
         text += `\n[${tag}: ${question.suggestions.join(" | ")}]`;
     }
 
-    return text;
+    return withQuestionKeyTag(text, question.key);
 }
 
 /**
@@ -206,30 +394,18 @@ export function getNextHumanizedQuestion(state) {
  * @returns {boolean}
  */
 export function shouldGenerateProposal(state) {
-    const { collectedData, isComplete, currentStep, questions } = state;
+    const questions = Array.isArray(state?.questions) ? state.questions : [];
+    const collectedData = state?.collectedData || {};
 
-    console.log(`🔍 shouldGenerateProposal: isComplete=${isComplete}, currentStep=${currentStep}, questionsLength=${questions?.length}, collectedKeys=${Object.keys(collectedData).join(",")}`);
-
-    // Primary check: all questions answered
-    if (isComplete) {
-        console.log("✅ Proposal: isComplete is true");
-        return true;
+    // Ready when every question has *some* value (including explicit skips).
+    for (const q of questions) {
+        if (!q?.key) continue;
+        const val = collectedData[q.key];
+        if (val === undefined || val === null || normalizeText(val) === "") {
+            return false;
+        }
     }
-
-    // Secondary check: currentStep has passed the last question
-    if (currentStep >= questions.length) {
-        console.log("✅ Proposal: currentStep >= questions.length");
-        return true;
-    }
-
-    // Direct check: if timeline is answered, we're done (Website Development has 12 questions, timeline is last)
-    if (collectedData.timeline && collectedData.timeline !== "[skipped]") {
-        console.log("✅ Proposal: timeline is answered");
-        return true;
-    }
-
-    console.log(`❌ Proposal: Not ready - currentStep=${currentStep}, questionsLength=${questions?.length}`);
-    return false;
+    return true;
 }
 
 /**
@@ -283,6 +459,14 @@ export function generateProposalFromState(state) {
 
     // First pass: Get the obvious ones by key
     clientName = collectedData.name || "";
+    budget =
+        collectedData.budget && collectedData.budget !== "[skipped]"
+            ? collectedData.budget
+            : "";
+    timeline =
+        collectedData.timeline && collectedData.timeline !== "[skipped]"
+            ? collectedData.timeline
+            : "";
 
     // Second pass: Analyze each value by content
     for (const [key, value] of Object.entries(collectedData)) {
@@ -450,4 +634,3 @@ To customize this proposal, use the Edit Proposal option.
 export function getOpeningMessage(service) {
     return getChatbot(service).openingMessage;
 }
-

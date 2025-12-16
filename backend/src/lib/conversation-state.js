@@ -22,6 +22,163 @@ const QUESTION_KEY_TAG_REGEX = /\[QUESTION_KEY:\s*([^\]]+)\]/i;
 
 const normalizeText = (value = "") => (value || "").toString().trim();
 
+const escapeRegExp = (value = "") =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const canonicalize = (value = "") =>
+    normalizeText(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
+const getSuggestionAliases = (value = "") => {
+    const text = normalizeText(value);
+    if (!text) return [];
+
+    const aliases = new Set([text]);
+
+    const withoutParens = text
+        .replace(/\s*\([^)]*\)\s*/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    if (withoutParens) aliases.add(withoutParens);
+
+    const parenMatches = Array.from(text.matchAll(/\(([^)]+)\)/g));
+    for (const match of parenMatches) {
+        const inside = normalizeText(match[1]);
+        if (!inside) continue;
+
+        // Only treat parenthetical content as aliases when it contains explicit alternatives.
+        // Example: "Payment Gateway (Razorpay/Stripe)" -> ["Razorpay", "Stripe"]
+        // Avoid broad aliases like "(React)" which would match many unrelated options.
+        if (/[\\/|,]/.test(inside)) {
+            for (const part of inside.split(/[\\/|,]/)) {
+                const cleaned = normalizeText(part);
+                if (cleaned) aliases.add(cleaned);
+            }
+        }
+    }
+
+    for (const part of text.split(/[\\/|]/)) {
+        const cleaned = normalizeText(part);
+        if (cleaned) aliases.add(cleaned);
+    }
+
+    if (text.toLowerCase().endsWith(" yet")) {
+        const noYet = text.slice(0, -4).trim();
+        if (noYet) aliases.add(noYet);
+    }
+
+    for (const alias of Array.from(aliases)) {
+        const withoutJs = alias
+            .replace(/\.?\bjs\b/gi, "")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (withoutJs && withoutJs !== alias) {
+            aliases.add(withoutJs);
+        }
+    }
+
+    return Array.from(aliases);
+};
+
+const matchSuggestionsInMessage = (question, rawMessage) => {
+    const message = normalizeText(rawMessage);
+    if (!message) return [];
+    if (!Array.isArray(question?.suggestions) || question.suggestions.length === 0) {
+        return [];
+    }
+
+    const messageLower = message.toLowerCase();
+    const messageCanonical = canonicalize(messageLower);
+    const matches = [];
+
+    for (const option of question.suggestions) {
+        const optionText = normalizeText(option);
+        if (!optionText) continue;
+
+        let isMatch = false;
+        const aliases = getSuggestionAliases(optionText);
+        for (const alias of aliases) {
+            const aliasLower = normalizeText(alias).toLowerCase();
+            const aliasCanonical = canonicalize(aliasLower);
+            if (!aliasCanonical) continue;
+
+            if (aliasCanonical.length <= 3 && !aliasLower.includes(" ")) {
+                isMatch = new RegExp(`\\b${escapeRegExp(aliasLower)}\\b`, "i").test(messageLower);
+            } else {
+                isMatch = messageCanonical.includes(aliasCanonical) || messageLower.includes(aliasLower);
+            }
+
+            if (isMatch) break;
+        }
+
+        if (isMatch) matches.push(optionText);
+    }
+
+    const unique = Array.from(new Set(matches));
+    if (unique.length <= 1) return unique;
+
+    // Prefer the most specific options when one match is a strict substring of another.
+    const ranked = unique
+        .map((optionText) => {
+            const canon = canonicalize(optionText.toLowerCase());
+            return { optionText, canon, len: canon.length };
+        })
+        .sort((a, b) => b.len - a.len);
+
+    const kept = [];
+    for (const item of ranked) {
+        if (!item.canon || item.len <= 3) {
+            kept.push(item);
+            continue;
+        }
+
+        const isSub = kept.some(
+            (keptItem) =>
+                keptItem.canon &&
+                keptItem.len > item.len &&
+                keptItem.canon.includes(item.canon)
+        );
+        if (!isSub) kept.push(item);
+    }
+
+    return kept.map((item) => item.optionText);
+};
+
+const trimEntity = (value = "") => {
+    let text = normalizeText(value);
+    if (!text) return "";
+
+    // Prefer the part before common separators.
+    text = text.split(/\s+and\s+/i)[0];
+    text = text.split(/\s+but\s+/i)[0];
+    text = text.split(/\s+so\s+/i)[0];
+    text = text.split(/\s+because\s+/i)[0];
+    text = text.split(/[,.!\n]/)[0];
+
+    return normalizeText(text).replace(/\s+/g, " ");
+};
+
+const extractOrganizationName = (value = "") => {
+    const text = normalizeText(value);
+    if (!text) return null;
+
+    const patterns = [
+        /\bfor\s+(?:my\s+)?(?:company|business|brand|project)\s+([a-z0-9][a-z0-9&._' -]{1,80})/i,
+        /\bmy\s+(?:company|business|brand|project)\s*(?:name\s*)?(?:is|:)\s*([a-z0-9][a-z0-9&._' -]{1,80})/i,
+        /\b(?:company|business|brand|project)\s*(?:name\s*)?(?:is|:)\s*([a-z0-9][a-z0-9&._' -]{1,80})/i,
+    ];
+
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (!match) continue;
+        const candidate = trimEntity(match[1]);
+        if (candidate && candidate.length <= 60) return candidate;
+    }
+
+    return null;
+};
+
 const getQuestionKeyFromAssistant = (value = "") => {
     const match = normalizeText(value).match(QUESTION_KEY_TAG_REGEX);
     return match ? match[1].trim() : null;
@@ -33,8 +190,22 @@ const withQuestionKeyTag = (text = "", key = "") => {
     return `${text}\n[QUESTION_KEY: ${key}]`;
 };
 
-const isGreetingMessage = (value = "") =>
-    /^(hi|hello|hey|hii+|yo|sup|what'?s up|whats up)\b/i.test(normalizeText(value));
+const isGreetingMessage = (value = "") => {
+    const raw = normalizeText(value);
+    if (!raw) return false;
+
+    const text = raw
+        .toLowerCase()
+        .replace(/[!.,]+$/g, "")
+        .trim();
+
+    // Treat as a greeting only when the message is basically *just* a greeting.
+    // Examples that should count: "hi", "hello!", "hey there"
+    // Examples that should NOT count: "hi i need a website", "hello can you help with SEO?"
+    if (text.length > 20) return false;
+
+    return /^(hi|hello|hey|hii+|yo|sup|what'?s up|whats up)(\s+there)?$/.test(text);
+};
 
 const isSkipMessage = (value = "") => {
     const text = normalizeText(value).toLowerCase();
@@ -135,16 +306,42 @@ const isLikelyName = (value = "") => {
     if (/\bhttps?:\/\//i.test(text) || /\bwww\./i.test(text)) return false;
     if (text.includes("@")) return false;
     if (/\d{2,}/.test(text)) return false;
-    if (/(budget|timeline|website|app|project|need|want|build|looking)\b/i.test(text)) return false;
+    if (
+        /(budget|timeline|website|web\s*app|app|project|need|want|build|looking|landing|page|portfolio|e-?commerce|ecommerce|shopify|wordpress|react|next|mern|pern|saas|dashboard)\b/i.test(
+            text
+        )
+    ) {
+        return false;
+    }
     return /[a-zA-Z]/.test(text);
 };
 
 const extractName = (value = "") => {
     const text = normalizeText(value).replace(/\?/g, "");
     if (!text) return null;
-    const match = text.match(/\bmy name is\s+(.+)$/i);
-    if (match) return match[1].trim();
-    return isLikelyName(text) ? text.trim() : null;
+
+    const explicitMatch = text.match(/\b(?:my\s+name\s+is|name\s+is)\s+(.+)$/i);
+    if (explicitMatch) {
+        const candidate = trimEntity(explicitMatch[1]);
+        const limited = candidate.split(/\s+/).slice(0, 3).join(" ");
+        return isLikelyName(limited) ? limited : null;
+    }
+
+    return isLikelyName(text) ? trimEntity(text) : null;
+};
+
+const extractExplicitName = (value = "") => {
+    const text = normalizeText(value).replace(/\?/g, "");
+    if (!text) return null;
+
+    const explicitMatch = text.match(
+        /\b(?:my\s+name\s+is|name\s+is|i\s+am|i'm|im|this\s+is)\s+(.+)$/i
+    );
+    if (!explicitMatch) return null;
+
+    const candidate = trimEntity(explicitMatch[1]);
+    const limited = candidate.split(/\s+/).slice(0, 3).join(" ");
+    return isLikelyName(limited) ? limited : null;
 };
 
 const getCurrentStepFromCollected = (questions = [], collectedData = {}) => {
@@ -177,8 +374,43 @@ const extractKnownFieldsFromMessage = (questions = [], message = "", collectedDa
     }
 
     if (keys.has("name") && !collectedData.name) {
-        const name = extractName(text);
+        // Only extract a name out-of-sequence when it's explicitly stated, to avoid
+        // misclassifying values like "portfolio" or "landing page" as a person's name.
+        const name = extractExplicitName(text);
         if (name) updates.name = name;
+    }
+
+    const orgKey = keys.has("company")
+        ? "company"
+        : keys.has("business_name")
+            ? "business_name"
+            : keys.has("business")
+                ? "business"
+                : keys.has("brand")
+                    ? "brand"
+                    : keys.has("project")
+                        ? "project"
+                        : null;
+
+    if (orgKey && !collectedData[orgKey]) {
+        const org = extractOrganizationName(text);
+        if (org) updates[orgKey] = org;
+    }
+
+    if (keys.has("website_type") && !collectedData.website_type) {
+        const question = questions.find((q) => q.key === "website_type");
+        const matches = matchSuggestionsInMessage(question, text);
+        if (matches.length) {
+            updates.website_type = matches.join(", ");
+        } else if (/\blanding\s*page\b/i.test(text)) {
+            updates.website_type = "Landing Page";
+        } else if (/\be-?commerce\b|\becommerce\b|\bonline\s*store\b/i.test(text)) {
+            updates.website_type = "E-commerce";
+        } else if (/\bportfolio\b/i.test(text)) {
+            updates.website_type = "Portfolio";
+        } else if (/\bweb\s*app\b|\bsaas\b|\bdashboard\b/i.test(text)) {
+            updates.website_type = "Web App";
+        }
     }
 
     const descriptionKey =
@@ -199,6 +431,30 @@ const extractKnownFieldsFromMessage = (questions = [], message = "", collectedDa
         }
     }
 
+    // Extract suggestion-based answers from any message (helps with out-of-sequence replies).
+    for (const question of questions) {
+        const key = question?.key;
+        if (!key) continue;
+        if (key === "website_type" || key === "budget" || key === "timeline") continue;
+
+        const existing = collectedData[key];
+        const alreadyAnswered =
+            existing !== undefined &&
+            existing !== null &&
+            normalizeText(existing) !== "";
+        if (alreadyAnswered) continue;
+        if (updates[key] !== undefined) continue;
+
+        if (!Array.isArray(question.suggestions) || question.suggestions.length === 0) {
+            continue;
+        }
+
+        const matches = matchSuggestionsInMessage(question, text);
+        if (!matches.length) continue;
+
+        updates[key] = question.multiSelect ? matches.join(", ") : matches[0];
+    }
+
     return updates;
 };
 
@@ -209,6 +465,22 @@ const extractAnswerForQuestion = (question, rawMessage) => {
     if (isSkipMessage(message)) return "[skipped]";
 
     switch (question.key) {
+        case "company":
+        case "business":
+        case "business_name":
+        case "brand":
+        case "project": {
+            if (isUserQuestion(message)) return null;
+            if (isBareBudgetAnswer(message) || isBareTimelineAnswer(message)) return null;
+            const budget = extractBudget(message);
+            if (budget && message.length <= 30) return null;
+            const timeline = extractTimeline(message);
+            if (timeline && message.length <= 30) return null;
+
+            const org = extractOrganizationName(message);
+            if (org) return org;
+            return message.length <= 60 ? trimEntity(message) : null;
+        }
         case "budget": {
             return extractBudget(message);
         }
@@ -219,19 +491,17 @@ const extractAnswerForQuestion = (question, rawMessage) => {
             return extractName(message);
         }
         default: {
+            const suggestionMatches = matchSuggestionsInMessage(question, message);
+            if (suggestionMatches.length) {
+                return question.multiSelect
+                    ? suggestionMatches.join(", ")
+                    : suggestionMatches[0];
+            }
+
             if (Array.isArray(question.suggestions) && question.suggestions.length) {
-                const normalized = message
-                    .toLowerCase()
-                    .replace(/[?.!]+$/g, "")
-                    .trim();
-                const matched = question.suggestions.find((opt) => {
-                    const candidate = normalizeText(opt)
-                        .toLowerCase()
-                        .replace(/[?.!]+$/g, "")
-                        .trim();
-                    return candidate === normalized;
-                });
-                if (matched) return matched;
+                // If this is a closed-set question and nothing matched, avoid incorrectly
+                // capturing a long multi-field message as the answer.
+                if (message.length > 80) return null;
             }
 
             if (isUserQuestion(message)) {
@@ -255,6 +525,14 @@ const extractAnswerForQuestion = (question, rawMessage) => {
 
                 return candidate;
             }
+
+            // Avoid capturing pure budget/timeline answers for unrelated questions.
+            if (isBareBudgetAnswer(message) || isBareTimelineAnswer(message)) return null;
+            const budget = extractBudget(message);
+            if (budget && message.length <= 30) return null;
+            const timeline = extractTimeline(message);
+            if (timeline && message.length <= 30) return null;
+
             return message;
         }
     }
@@ -322,20 +600,37 @@ export function processUserAnswer(state, message) {
     const collectedData = { ...(state?.collectedData || {}) };
     const normalized = normalizeText(message);
 
-    Object.assign(
-        collectedData,
-        extractKnownFieldsFromMessage(questions, normalized, collectedData)
-    );
+    const activeStep = Number.isInteger(state?.currentStep)
+        ? state.currentStep
+        : getCurrentStepFromCollected(questions, collectedData);
+    const activeQuestion = questions[activeStep];
+    const activeKey = activeQuestion?.key || null;
+    const beforeActiveValue = activeKey ? collectedData[activeKey] : undefined;
 
-    const stepBefore = getCurrentStepFromCollected(questions, collectedData);
-    const currentQuestion = questions[stepBefore];
+    const extracted = extractKnownFieldsFromMessage(questions, normalized, collectedData);
+    Object.assign(collectedData, extracted);
 
     let answeredKey = null;
-    if (currentQuestion) {
-        const answer = extractAnswerForQuestion(currentQuestion, normalized);
-        if (answer !== null && answer !== undefined) {
-            collectedData[currentQuestion.key] = answer;
-            answeredKey = currentQuestion.key;
+
+    if (activeQuestion?.key) {
+        const afterActiveValue = collectedData[activeQuestion.key];
+        const hadValueBefore =
+            beforeActiveValue !== undefined &&
+            beforeActiveValue !== null &&
+            normalizeText(beforeActiveValue) !== "";
+        const hasValueAfter =
+            afterActiveValue !== undefined &&
+            afterActiveValue !== null &&
+            normalizeText(afterActiveValue) !== "";
+
+        if (!hadValueBefore && hasValueAfter) {
+            answeredKey = activeQuestion.key;
+        } else if (!hasValueAfter) {
+            const answer = extractAnswerForQuestion(activeQuestion, normalized);
+            if (answer !== null && answer !== undefined) {
+                collectedData[activeQuestion.key] = answer;
+                answeredKey = activeQuestion.key;
+            }
         }
     }
 

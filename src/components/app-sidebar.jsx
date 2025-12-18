@@ -40,6 +40,11 @@ const brandPresets = {
     plan: "Client workspace",
     logoText: "CL",
   },
+  PROJECT_MANAGER: {
+    name: "Project Manager",
+    plan: "Management Portal",
+    logoText: "PM",
+  },
 };
 
 const navConfigs = {
@@ -116,6 +121,14 @@ const navConfigs = {
       title: "Profile",
       url: "/client/profile",
       icon: User,
+      isActive: true,
+    },
+  ],
+  PROJECT_MANAGER: [
+    {
+      title: "Overview",
+      url: "/project-manager",
+      icon: LayoutDashboard,
       isActive: true,
     },
   ],

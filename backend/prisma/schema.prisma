@@ -4,14 +4,15 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_DATABASE_URL")
+  url       = "postgresql://neondb_owner:npg_RVI8UbL2HDik@ep-nameless-bar-a1q9980g-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+  directUrl = "postgresql://neondb_owner:npg_RVI8UbL2HDik@ep-nameless-bar-a1q9980g.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 }
 
 enum UserRole {
   CLIENT
   FREELANCER
   ADMIN
+  PROJECT_MANAGER
 }
 
 enum ProjectStatus {
@@ -27,6 +28,12 @@ enum ProposalStatus {
   REJECTED
 }
 
+enum DisputeStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
 model User {
   id           String     @id @default(cuid())
   email        String     @unique
@@ -40,6 +47,8 @@ model User {
   proposals    Proposal[]
   createdChats ChatConversation[] @relation("ChatCreator")
   sentMessages ChatMessage[]      @relation("ChatSender")
+  raisedDisputes Dispute[] @relation("DisputeRaiser")
+  managedDisputes Dispute[] @relation("DisputeManager")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 }
@@ -58,6 +67,7 @@ model Project {
   owner           User          @relation("ProjectOwner", fields: [ownerId], references: [id])
   ownerId         String
   proposals       Proposal[]
+  disputes        Dispute[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 }
@@ -73,6 +83,27 @@ model Proposal {
   projectId    String
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
+}
+
+model Dispute {
+  id              String        @id @default(cuid())
+  description     String        @db.Text
+  status          DisputeStatus @default(OPEN)
+  resolutionNotes String?       @db.Text
+  meetingLink     String?
+  meetingDate     DateTime?
+  
+  projectId       String
+  project         Project       @relation(fields: [projectId], references: [id])
+  
+  raisedById      String
+  raisedBy        User          @relation("DisputeRaiser", fields: [raisedById], references: [id])
+  
+  managerId       String?
+  manager         User?         @relation("DisputeManager", fields: [managerId], references: [id])
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 }
 
 model Profile {

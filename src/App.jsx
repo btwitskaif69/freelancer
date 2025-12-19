@@ -27,6 +27,7 @@ import NotepadPage from "@/components/ui/notepad-page";
 import AdminDashboard from "@/components/admin/AdminDashboard";
 import AdminUsers from "@/components/admin/AdminUsers";
 import AdminProjects from "@/components/admin/AdminProjects";
+import AdminDisputes from "@/components/admin/AdminDisputes";
 import AdminLogin from "@/components/admin/AdminLogin";
 import AdminRoute from "@/components/auth/AdminRoute";
 
@@ -235,6 +236,14 @@ const App = () => {
             element={
               <AdminRoute>
                 <AdminUsers roleFilter="FREELANCER" />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/project-managers"
+            element={
+              <AdminRoute>
+                <AdminDisputes />
               </AdminRoute>
             }
           />

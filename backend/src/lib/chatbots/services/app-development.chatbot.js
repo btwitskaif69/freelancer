@@ -21,6 +21,7 @@ export const questions = [
       "business"
     ],
     "templates": [
+      "Nice to meet you, {name}! What's your company or project called?"
       "Nice to meet you, {name}! What's the project name?"
     ],
     "suggestions": null
@@ -35,6 +36,8 @@ export const questions = [
       "idea"
     ],
     "templates": [
+      "Awesome! Tell me a bit about what you're building — what's the vision? 🚀",
+      "Sounds exciting! What exactly are you looking to create?"
       "In 1 simple sentence, describe your project in easy words. Example: An app for customers to browse and buy my products.",
       "Briefly describe what you want to build (1 sentence)."
     ],
@@ -49,6 +52,7 @@ export const questions = [
       "need"
     ],
     "templates": [
+      "What kind of website do you need? (Select all that apply) 🌐"
       "What kind of website do you need?"
     ],
     "suggestions": [
@@ -59,6 +63,8 @@ export const questions = [
       "Portfolio",
       "Web App",
       "Other"
+    ],
+    "multiSelect": true
     ]
   },
   {
@@ -147,6 +153,7 @@ export const questions = [
       "react"
     ],
     "templates": [
+      "What technology stack would you prefer? (Select all that apply) 🛠️"
       "What technology stack would you prefer? (Select one) 🛠️"
     ],
     "suggestions": [
@@ -154,10 +161,17 @@ export const questions = [
       "Next.js",
       "React.js",
       "React.js + Node.js",
+      "MERN Stack",
+      "PERN Stack",
       "Shopify",
       "Shopify + Hydrogen (React)",
       "Laravel + Vue",
       "Django + React",
+      "Frontend Only",
+      "Backend Only",
+      "No preference"
+    ],
+    "multiSelect": true
       "No preference"
     ]
   },
@@ -170,6 +184,7 @@ export const questions = [
       "cloud"
     ],
     "templates": [
+      "Where would you like the website deployed/hosted? 🚀"
       "Where would you like the website deployed/hosted? (Select up to 2) 🚀"
     ],
     "suggestions": [
@@ -182,6 +197,7 @@ export const questions = [
       "VPS/Custom Server",
       "Not sure yet"
     ],
+    "multiSelect": true
     "multiSelect": true,
     "maxSelect": 2
   },
@@ -212,6 +228,10 @@ export const questions = [
       "What's your budget for this project? 💰"
     ],
     "suggestions": [
+      "Under ₹20,000",
+      "₹20,000 - ₹50,000",
+      "₹50,000 - ₹1,00,000",
+      "₹1,00,000+"
       "WordPress (₹30,000+)",
       "3D WordPress (₹45,000+)",
       "Shopify (₹30,000+)",

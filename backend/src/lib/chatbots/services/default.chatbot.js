@@ -23,6 +23,8 @@ export const questions = [
       "brand"
     ],
     "templates": [
+      "Nice to meet you, {name}! 🎉 What's your company or project called?",
+      "Great to have you here, {name}! What's the name of your project?"
       "Nice to meet you, {name}! What's the project name?",
       "Great to have you here, {name}! What's the project name?"
     ],

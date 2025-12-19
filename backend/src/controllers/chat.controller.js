@@ -871,6 +871,7 @@ const rewriteProposalWithAI = async (rawProposal, apiKey) => {
     });
 
     // Extract the project overview section to rewrite
+    const overviewMatch = rawProposal.match(/PROJECT OVERVIEW\n═+\n([\s\S]*?)\n\nWebsite Type:/);
     const overviewMatch = rawProposal.match(
       /PROJECT OVERVIEW\s*\n(?:(?:[=\-_*]|[\u2500-\u257F])+\s*\n)?([\s\S]*?)\n\s*Website Type:/i
     );
@@ -886,6 +887,12 @@ const rewriteProposalWithAI = async (rawProposal, apiKey) => {
       messages: [
         {
           role: "system",
+          content: `You are a professional proposal writer. Rewrite the following project description to be:
+1. Professional and formal
+2. Fix any spelling or grammar errors
+3. Keep it concise (2-3 sentences max)
+4. Keep the project name if mentioned
+5. Do NOT add any extra details, just clean up what's given
           content: `Rewrite the following project description to be:
 1. Simple and easy to understand
 2. One short sentence (max 20 words)
@@ -994,6 +1001,7 @@ export const generateChatReply = async ({
         role: "system",
         content:
           `You are a helpful assistant for the service "${service || "General"}" on a freelancer platform. ` +
+          `Answer the user's question in 1-5 concise sentences. ` +
           `Answer the user's question concisely (bullets allowed, keep it under ~12 lines). ` +
           `If the user asks for a roadmap/cost/timeline breakdown, provide a compact milestone plan with rough effort split. ` +
           `If the requested scope looks unrealistic for the stated budget/timeline, say so plainly and suggest 2-3 options (reduce scope, phased delivery, or adjust budget/stack). ` +
@@ -1045,6 +1053,7 @@ export const generateChatReply = async ({
   };
 
   let aiAnswer = "";
+  if (updatedState?.meta?.wasQuestion) {
   const wantsRoadmap = isRoadmapOrEstimateRequest(normalizedMessage);
   if (wantsRoadmap) {
     aiAnswer = generateRoadmapFromState(updatedState);

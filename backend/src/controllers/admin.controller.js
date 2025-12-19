@@ -5,7 +5,11 @@ import { prisma } from "../lib/prisma.js";
 export const getDashboardStats = asyncHandler(async (req, res) => {
   try {
     // Get basic counts - these should always work
-    const totalUsers = await prisma.user.count();
+    const totalUsers = await prisma.user.count({
+      where: {
+        role: { not: 'ADMIN' }
+      }
+    });
     const totalProjects = await prisma.project.count();
     const totalProposals = await prisma.proposal.count();
     

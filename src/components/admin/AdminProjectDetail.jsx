@@ -239,7 +239,7 @@ const AdminProjectDetail = () => {
 
              {/* Disputes Section */}
              {project.disputes?.length > 0 && (
-              <Card className="border-red-200 dark:border-red-800">
+              <Card>
                 <CardHeader>
                   <CardTitle className="text-red-600 dark:text-red-400 flex items-center gap-2">
                     <AlertCircle className="h-5 w-5" />
@@ -248,26 +248,54 @@ const AdminProjectDetail = () => {
                 </CardHeader>
                 <CardContent>
                    <div className="space-y-3">
-                     {project.disputes.map(dispute => (
-                       <div 
-                         key={dispute.id} 
-                         className="p-3 bg-red-50 dark:bg-red-900/10 rounded border border-red-100 dark:border-red-800 cursor-pointer hover:bg-red-100/50 transition-colors"
-                         onClick={() => {
-                           setSelectedDispute(dispute);
-                           setDisputeDialogOpen(true);
-                         }}
-                       >
-                         <div className="flex justify-between items-start mb-1">
-                            <span className="font-medium text-sm text-red-900 dark:text-red-200">
-                              Raised by {dispute.raisedBy?.fullName}
-                            </span>
-                            <Badge variant="outline" className="text-red-600 border-red-200">{dispute.status}</Badge>
+                     {project.disputes.map(dispute => {
+                       const statusStyle = (() => {
+                         const s = (dispute.status || "").toUpperCase();
+                         if (s === "RESOLVED") {
+                           return {
+                             container: "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-800 hover:bg-emerald-100/50",
+                             text: "text-emerald-900 dark:text-emerald-200",
+                             muted: "text-emerald-700 dark:text-emerald-300",
+                             badge: "text-emerald-600 border-emerald-200"
+                           };
+                         }
+                         if (s === "IN_PROGRESS") {
+                           return {
+                             container: "bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-800 hover:bg-amber-100/50",
+                             text: "text-amber-900 dark:text-amber-200",
+                             muted: "text-amber-700 dark:text-amber-300",
+                             badge: "text-amber-600 border-amber-200"
+                           };
+                         }
+                         return {
+                           container: "bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-800 hover:bg-red-100/50",
+                           text: "text-red-900 dark:text-red-200",
+                           muted: "text-red-700 dark:text-red-300",
+                           badge: "text-red-600 border-red-200"
+                         };
+                       })();
+
+                       return (
+                         <div 
+                           key={dispute.id} 
+                           className={`p-3 rounded border cursor-pointer transition-colors ${statusStyle.container}`}
+                           onClick={() => {
+                             setSelectedDispute(dispute);
+                             setDisputeDialogOpen(true);
+                           }}
+                         >
+                           <div className="flex justify-between items-start mb-1">
+                              <span className={`font-medium text-sm ${statusStyle.text}`}>
+                                Raised by {dispute.raisedBy?.fullName}
+                              </span>
+                              <Badge variant="outline" className={`${statusStyle.badge}`}>{dispute.status}</Badge>
+                           </div>
+                           <p className={`text-sm line-clamp-2 ${statusStyle.muted}`}>
+                             {dispute.description}
+                           </p>
                          </div>
-                         <p className="text-sm text-red-700 dark:text-red-300 line-clamp-2">
-                           {dispute.description}
-                         </p>
-                       </div>
-                     ))}
+                       );
+                     })}
                    </div>
                 </CardContent>
               </Card>

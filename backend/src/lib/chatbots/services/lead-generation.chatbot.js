@@ -1,5 +1,10 @@
 export const service = "Lead Generation";
 export const openingMessage = "Hello! 📈 Looking to grow your leads? I'll help you put together the perfect campaign!";
+export const serviceDetails = `Sub-types: B2B Lead Generation, B2C Lead Generation, Real Estate Leads, Appointment Booking
+Deliverables: Ad account setup, targeting & creatives, lead tracking sheet/CRM, weekly performance reports
+Pricing: Setup ₹15,000–₹30,000 | Monthly ₹20,000–₹60,000
+Timelines: Full campaign is ongoing (minimum 30 days) | Partial scope: Ad setup only 5–7 days (₹10,000–₹20,000), Lead data delivery only 10–15 days (custom pricing)
+Timeline policy: timelines are in working days; 10–20% buffer included; delays due to missing client inputs pause the timeline.`;
 export const questions = [
   {
     "key": "name",
@@ -112,5 +117,5 @@ export const questions = [
   }
 ];
 
-const chatbot = { service, openingMessage, questions };
+const chatbot = { service, openingMessage, questions, serviceDetails };
 export default chatbot;

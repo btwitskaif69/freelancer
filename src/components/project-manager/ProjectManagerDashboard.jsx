@@ -3,21 +3,17 @@ import { RoleAwareSidebar } from "@/components/dashboard/RoleAwareSidebar";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ManagerTopBar } from "./ManagerTopBar";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Video, CheckCircle2, AlertCircle, Clock, ChevronDownIcon } from "lucide-react";
+import { Loader2, Video, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 export const ProjectManagerDashboardContent = () => {
-    const { authFetch, user } = useAuth();
+    const { authFetch } = useAuth();
     const [disputes, setDisputes] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -49,75 +45,71 @@ export const ProjectManagerDashboardContent = () => {
     const resolvedDisputes = disputes.filter(d => d.status === 'RESOLVED');
 
     return (
-        <div className="flex flex-col min-h-screen w-full">
-            <ManagerTopBar />
-
-            <div className="p-8 space-y-8 max-w-7xl mx-auto w-full">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Project Manager Dashboard</h1>
-                        <p className="text-muted-foreground mt-1">overview of project disputes and resolutions</p>
-                    </div>
-                    <Button onClick={fetchDisputes} variant="outline" size="sm" className="gap-2">
-                        <Clock className="w-4 h-4" />
-                        Refresh Data
-                    </Button>
+        <div className="p-8 space-y-8 max-w-7xl mx-auto">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Project Manager Dashboard</h1>
+                    <p className="text-muted-foreground mt-1">overview of project disputes and resolutions</p>
                 </div>
+                <Button onClick={fetchDisputes} variant="outline" size="sm" className="gap-2">
+                    <Clock className="w-4 h-4" />
+                    Refresh Data
+                </Button>
+            </div>
 
-                {loading ? (
-                    <div className="flex justify-center p-20"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>
-                ) : (
-                    <div className="space-y-8">
-                        {/* Overview Section */}
-                        <PMOverview disputes={disputes} />
+            {loading ? (
+                <div className="flex justify-center p-20"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>
+            ) : (
+                <div className="space-y-8">
+                    {/* Overview Section */}
+                    <PMOverview disputes={disputes} />
 
-                        <Separator />
+                    <Separator />
 
-                        {disputes.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center p-20 text-center border-dashed border-2 rounded-xl bg-muted/30">
-                                <CheckCircle2 className="w-12 h-12 text-muted-foreground mb-4" />
-                                <h3 className="text-lg font-medium">All Clear</h3>
-                                <p className="text-muted-foreground">No disputes found.</p>
+                    {disputes.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center p-20 text-center border-dashed border-2 rounded-xl bg-muted/30">
+                            <CheckCircle2 className="w-12 h-12 text-muted-foreground mb-4" />
+                            <h3 className="text-lg font-medium">All Clear</h3>
+                            <p className="text-muted-foreground">No disputes found.</p>
+                        </div>
+                    ) : (
+                        <div className="grid gap-6">
+                            <h2 className="text-xl font-semibold">Active Disputes</h2>
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {[...openDisputes, ...inProgressDisputes].length > 0 ? (
+                                    [...openDisputes, ...inProgressDisputes].map(dispute => (
+                                        <DisputeCard
+                                            key={dispute.id}
+                                            dispute={dispute}
+                                            onUpdate={fetchDisputes}
+                                        />
+                                    ))
+                                ) : (
+                                    <div className="col-span-full text-center p-10 text-muted-foreground bg-muted/20 rounded-lg">
+                                        No active disputes.
+                                    </div>
+                                )}
                             </div>
-                        ) : (
-                            <div className="grid gap-6">
-                                <h2 className="text-xl font-semibold">Active Disputes</h2>
-                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                    {[...openDisputes, ...inProgressDisputes].length > 0 ? (
-                                        [...openDisputes, ...inProgressDisputes].map(dispute => (
+
+                            {resolvedDisputes.length > 0 && (
+                                <>
+                                    <h2 className="text-xl font-semibold mt-4">Resolved History</h2>
+                                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 opacity-80">
+                                        {resolvedDisputes.map(dispute => (
                                             <DisputeCard
                                                 key={dispute.id}
                                                 dispute={dispute}
                                                 onUpdate={fetchDisputes}
+                                                readOnly={true}
                                             />
-                                        ))
-                                    ) : (
-                                        <div className="col-span-full text-center p-10 text-muted-foreground bg-muted/20 rounded-lg">
-                                            No active disputes.
-                                        </div>
-                                    )}
-                                </div>
-
-                                {resolvedDisputes.length > 0 && (
-                                    <>
-                                        <h2 className="text-xl font-semibold mt-4">Resolved History</h2>
-                                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 opacity-80">
-                                            {resolvedDisputes.map(dispute => (
-                                                <DisputeCard
-                                                    key={dispute.id}
-                                                    dispute={dispute}
-                                                    onUpdate={fetchDisputes}
-                                                    readOnly={true}
-                                                />
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
@@ -202,35 +194,6 @@ const DisputeCard = ({ dispute, onUpdate, readOnly = false }) => {
     const [resolution, setResolution] = useState(dispute.resolutionNotes || "");
     const [status, setStatus] = useState(dispute.status);
 
-    const dateObj = meetingDate ? new Date(meetingDate) : undefined;
-    const timeString = meetingDate && meetingDate.includes('T') ? meetingDate.split('T')[1] : "10:00";
-
-    const handleDateSelect = (newDate) => {
-        if (!newDate) {
-            setMeetingDate("");
-            return;
-        }
-        const year = newDate.getFullYear();
-        const month = String(newDate.getMonth() + 1).padStart(2, "0");
-        const day = String(newDate.getDate()).padStart(2, "0");
-        const timePart = meetingDate && meetingDate.includes('T') ? meetingDate.split('T')[1] : "10:00";
-        setMeetingDate(`${year}-${month}-${day}T${timePart}`);
-    };
-
-    const handleTimeSelect = (newTime) => {
-        if (dateObj) {
-            const datePart = meetingDate.split('T')[0];
-            setMeetingDate(`${datePart}T${newTime}`);
-        }
-    };
-
-    // Generate time options (every 30 mins)
-    const timeOptions = Array.from({ length: 48 }).map((_, i) => {
-        const hour = Math.floor(i / 2);
-        const minute = i % 2 === 0 ? '00' : '30';
-        return `${String(hour).padStart(2, '0')}:${minute}`;
-    });
-
     const handleUpdate = async () => {
         setLoading(true);
         try {
@@ -309,68 +272,7 @@ const DisputeCard = ({ dispute, onUpdate, readOnly = false }) => {
                     </div>
                 )}
             </CardContent>
-            <CardFooter className="flex flex-col gap-2 pt-0 mt-auto">
-                {dispute.project?.proposals?.[0] && (
-                    <Dialog>
-                        <DialogTrigger asChild>
-                            <Button className="w-full" variant="outline" size="sm">
-                                View Proposal
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-3xl">
-                            <DialogHeader>
-                                <DialogTitle>Proposal: {dispute.project?.title}</DialogTitle>
-                                <DialogDescription className="text-xs">
-                                    Project Budget: ${dispute.project?.budget?.toLocaleString()}
-                                </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4 py-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <h4 className="font-medium text-sm text-muted-foreground">Client</h4>
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-8 w-8 min-w-[2rem] rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 font-bold text-xs uppercase">
-                                                {dispute.project.owner?.fullName?.[0] || "C"}
-                                            </div>
-                                            <div className="flex flex-col min-w-0">
-                                                <span className="text-sm font-medium truncate">
-                                                    {dispute.project.owner?.fullName || "Unknown Client"}
-                                                </span>
-                                                <span className="text-xs text-muted-foreground truncate">
-                                                    {dispute.project.owner?.email}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <h4 className="font-medium text-sm text-muted-foreground">Freelancer</h4>
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-8 w-8 min-w-[2rem] rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs uppercase">
-                                                {dispute.project.proposals[0].freelancer?.fullName?.[0] || "F"}
-                                            </div>
-                                            <div className="flex flex-col min-w-0">
-                                                <span className="text-sm font-medium truncate">
-                                                    {dispute.project.proposals[0].freelancer?.fullName || "Unknown Freelancer"}
-                                                </span>
-                                                <span className="text-xs text-muted-foreground truncate">
-                                                    {dispute.project.proposals[0].freelancer?.email}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <Separator />
-                                <div className="space-y-2">
-                                    <h4 className="font-medium text-sm text-muted-foreground">Project Description</h4>
-                                    <div className="text-sm p-4 bg-muted/50 rounded-lg border max-h-96 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                        {dispute.project.description}
-                                    </div>
-                                </div>
-                            </div>
-                        </DialogContent>
-                    </Dialog>
-                )}
-
+            <CardFooter className="pt-0 mt-auto">
                 <Dialog open={open} onOpenChange={setOpen}>
                     <DialogTrigger asChild>
                         <Button className="w-full" variant={readOnly ? "outline" : "default"} size="sm">
@@ -406,55 +308,12 @@ const DisputeCard = ({ dispute, onUpdate, readOnly = false }) => {
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2 col-span-2">
                                     <label className="text-sm font-medium">Meeting Schedule (Optional)</label>
-                                    <div className="flex gap-4 pt-1">
-                                        <div className="flex flex-col gap-2">
-                                            <Label htmlFor="date-picker" className="px-1 text-xs text-muted-foreground font-normal">
-                                                Date
-                                            </Label>
-                                            <Popover>
-                                                <PopoverTrigger asChild>
-                                                    <Button
-                                                        variant="outline"
-                                                        id="date-picker"
-                                                        className={`w-[180px] justify-between text-left font-normal ${!dateObj && "text-muted-foreground"}`}
-                                                        disabled={readOnly}
-                                                    >
-                                                        {dateObj ? dateObj.toLocaleDateString() : "Select date"}
-                                                        <ChevronDownIcon className="h-4 w-4 opacity-50" />
-                                                    </Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-auto p-0" align="start">
-                                                    <Calendar
-                                                        mode="single"
-                                                        selected={dateObj}
-                                                        onSelect={handleDateSelect}
-                                                        initialFocus
-                                                    />
-                                                </PopoverContent>
-                                            </Popover>
-                                        </div>
-                                        <div className="flex flex-col gap-2">
-                                            <Label htmlFor="time-picker" className="px-1 text-xs text-muted-foreground font-normal">
-                                                Time
-                                            </Label>
-                                            <Select
-                                                value={timeString}
-                                                onValueChange={handleTimeSelect}
-                                                disabled={readOnly || !meetingDate}
-                                            >
-                                                <SelectTrigger className="w-[120px]">
-                                                    <SelectValue placeholder="Time" />
-                                                </SelectTrigger>
-                                                <SelectContent className="h-48">
-                                                    {timeOptions.map((time) => (
-                                                        <SelectItem key={time} value={time}>
-                                                            {time}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
+                                    <Input
+                                        type="datetime-local"
+                                        value={meetingDate}
+                                        onChange={(e) => setMeetingDate(e.target.value)}
+                                        readOnly={readOnly}
+                                    />
                                 </div>
                                 <div className="space-y-2 col-span-2">
                                     <label className="text-sm font-medium">Google Meet Link</label>

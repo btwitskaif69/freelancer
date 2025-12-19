@@ -1,5 +1,10 @@
 export const service = "Software Development";
 export const openingMessage = "Hi! 💻 Let's build some amazing software together. Tell me about your project!";
+export const serviceDetails = `Sub-types: Custom Web Software, SaaS Platforms, Internal Tools, CRM/ERP Systems
+Deliverables: Requirement documentation, custom modules, admin panel, deployment & handover
+Pricing: Small software ₹1,50,000–₹3,00,000 | SaaS/Enterprise ₹5,00,000–₹20,00,000+
+Timelines: Full project 6–12 weeks (buffer included) | Partial scope: Module development 2–4 weeks (₹50,000–₹2,00,000), Admin panel only 2–3 weeks (₹40,000–₹1,20,000)
+Timeline policy: timelines are in working days; 10–20% buffer included; delays due to missing client inputs pause the timeline.`;
 export const questions = [
   {
     "key": "name",
@@ -241,5 +246,5 @@ export const questions = [
   }
 ];
 
-const chatbot = { service, openingMessage, questions };
+const chatbot = { service, openingMessage, questions, serviceDetails };
 export default chatbot;

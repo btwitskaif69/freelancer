@@ -1,245 +1,97 @@
 export const service = "App Development";
-export const openingMessage = "Hey! 📱 Ready to build your app? Let's figure out exactly what you need!";
+export const openingMessage =
+  "Hey! 📱 Ready to build your app? Tell me what you have in mind!";
+
+export const serviceDetails = `Sub-types: Android App, iOS App, Cross-platform (Flutter / React Native), App Maintenance
+Deliverables: UI screens & user flow, frontend + backend development, API integration, testing & deployment, App Store / Play Store submission
+Pricing: MVP App ₹2,00,000–₹4,00,000 | Advanced App ₹5,00,000–₹12,00,000 | Maintenance ₹15,000–₹40,000/month
+Timelines: Full project 8–14 weeks (buffer included) | Partial scope: UI Design 2–3 weeks (₹40,000–₹1,00,000), Backend 4–6 weeks (₹1,00,000–₹3,00,000), Feature enhancement 1–3 weeks (₹30,000–₹1,50,000)
+Timeline policy: timelines are in working days; 10–20% buffer included; delays due to missing client inputs pause the timeline.`;
+
 export const questions = [
   {
-    "key": "name",
-    "patterns": [
-      "name",
-      "call you"
-    ],
-    "templates": [
-      "Hey! 🚀 Let's build something amazing. What's your name?",
-      "Hi there! Ready to create your website? What should I call you?"
-    ],
-    "suggestions": null
+    key: "name",
+    patterns: ["name", "call you"],
+    templates: ["What’s your name?"],
+    suggestions: null,
   },
   {
-    "key": "company",
-    "patterns": [
-      "company",
-      "project",
-      "business"
-    ],
-    "templates": [
-      "Nice to meet you, {name}! What's the project name?"
-    ],
-    "suggestions": null
+    key: "project_name",
+    patterns: ["app name", "project", "company", "brand"],
+    templates: ["Nice to meet you, {name}! What’s the app/project name?"],
+    suggestions: null,
   },
   {
-    "key": "description",
-    "patterns": [
-      "building",
-      "describe",
-      "tell me",
-      "about",
-      "idea"
+    key: "platform",
+    patterns: ["android", "ios", "flutter", "react native", "cross-platform"],
+    templates: ["Which platforms do you want to support?"],
+    suggestions: [
+      "Android",
+      "iOS",
+      "Android + iOS (Cross-platform)",
+      "Not sure yet",
     ],
-    "templates": [
-      "In 1 simple sentence, describe your project in easy words. Example: An app for customers to browse and buy my products.",
-      "Briefly describe what you want to build (1 sentence)."
-    ],
-    "suggestions": null
   },
   {
-    "key": "website_type",
-    "patterns": [
-      "type",
-      "kind",
-      "what website",
-      "need"
+    key: "description",
+    patterns: ["idea", "build", "app", "mvp"],
+    templates: [
+      "In 1 sentence, what should the app do? (Who is it for + main goal)",
     ],
-    "templates": [
-      "What kind of website do you need?"
-    ],
-    "suggestions": [
-      "Landing Page",
-      "Business Website",
-      "Informational Website",
-      "E-commerce",
-      "Portfolio",
-      "Web App",
-      "Other"
-    ]
+    suggestions: null,
   },
   {
-    "key": "pages",
-    "patterns": [
-      "pages",
-      "sections",
-      "features"
-    ],
-    "templates": [
-      "Every website includes: Home, About, Contact, Privacy Policy & Terms. What additional pages do you need? (Select all that apply)"
-    ],
-    "suggestions": [
-      "Services",
-      "Products",
-      "Portfolio/Gallery",
-      "Testimonials",
-      "Blog",
-      "FAQ",
-      "Pricing",
-      "Shop/Store",
-      "Cart/Checkout",
-      "Wishlist",
-      "Order Tracking",
-      "Reviews/Ratings",
-      "Search",
-      "Book Now",
-      "Account/Login",
-      "Admin Dashboard",
-      "User Dashboard",
-      "Analytics Dashboard",
-      "Notifications",
-      "Chat/Support Widget",
-      "Help/Support",
-      "Resources",
-      "Events",
-      "3D Animations",
-      "3D Model Viewer",
-      "None"
-    ],
-    "multiSelect": true
+    key: "core_features",
+    patterns: ["features", "functionality", "modules"],
+    templates: ["List the top 3–6 must-have features (bullets are fine)."],
+    suggestions: null,
   },
   {
-    "key": "integrations",
-    "patterns": [
-      "integration",
-      "payment",
-      "api",
-      "third-party"
-    ],
-    "templates": [
-      "What integrations do you need? (Select all that apply) 🔌"
-    ],
-    "suggestions": [
-      "Payment Gateway (Razorpay/Stripe)",
-      "Email Service (Nodemailer/Resend)",
-      "Delivery/Shipping Tracking",
-      "None"
-    ],
-    "multiSelect": true
-  },
-  {
-    "key": "design",
-    "patterns": [
-      "design",
-      "look",
-      "style",
-      "wireframe"
-    ],
-    "templates": [
-      "Do you have any designs or inspirations in mind? 🎨"
-    ],
-    "suggestions": [
-      "I have designs",
-      "Need design help",
+    key: "design_assets",
+    patterns: ["design", "ui", "figma", "screens"],
+    templates: ["Do you already have UI designs (Figma) or need UI/UX help?"],
+    suggestions: [
+      "Yes, I have designs",
+      "Need UI/UX design",
       "Have some references",
-      "Not sure yet"
-    ]
+      "Not sure yet",
+    ],
   },
   {
-    "key": "tech",
-    "patterns": [
-      "tech",
-      "platform",
-      "wordpress",
-      "react"
-    ],
-    "templates": [
-      "What technology stack would you prefer? (Select one) 🛠️"
-    ],
-    "suggestions": [
-      "WordPress",
-      "Next.js",
-      "React.js",
-      "React.js + Node.js",
-      "Shopify",
-      "Shopify + Hydrogen (React)",
-      "Laravel + Vue",
-      "Django + React",
-      "No preference"
-    ]
+    key: "backend",
+    patterns: ["backend", "admin", "api", "database"],
+    templates: ["Do you need a backend/admin panel as well?"],
+    suggestions: ["Yes", "No / app only", "Not sure yet"],
   },
   {
-    "key": "deployment",
-    "patterns": [
-      "deploy",
-      "hosting",
-      "server",
-      "cloud"
+    key: "integrations",
+    patterns: ["payment", "notifications", "maps", "login", "analytics"],
+    templates: ["Any key integrations? (Select all that apply)"],
+    suggestions: [
+      "Payments",
+      "Push Notifications",
+      "Maps",
+      "Social Login",
+      "Chat",
+      "Analytics",
+      "Other",
+      "None",
     ],
-    "templates": [
-      "Where would you like the website deployed/hosted? (Select up to 2) 🚀"
-    ],
-    "suggestions": [
-      "Vercel",
-      "Netlify",
-      "AWS",
-      "DigitalOcean",
-      "Railway",
-      "Render",
-      "VPS/Custom Server",
-      "Not sure yet"
-    ],
-    "multiSelect": true,
-    "maxSelect": 2
+    multiSelect: true,
   },
   {
-    "key": "domain",
-    "patterns": [
-      "domain",
-      "url",
-      "website name"
-    ],
-    "templates": [
-      "Do you have a domain name? 🌍"
-    ],
-    "suggestions": [
-      "I already have domain",
-      "I don't have domain"
-    ]
+    key: "budget",
+    patterns: ["budget", "cost", "price"],
+    templates: ["What’s your budget range?"],
+    suggestions: ["₹2,00,000–₹4,00,000 (MVP)", "₹5,00,000–₹12,00,000", "Flexible"],
   },
   {
-    "key": "budget",
-    "patterns": [
-      "budget",
-      "cost",
-      "price",
-      "spend"
-    ],
-    "templates": [
-      "What's your budget for this project? 💰"
-    ],
-    "suggestions": [
-      "WordPress (₹30,000+)",
-      "3D WordPress (₹45,000+)",
-      "Shopify (₹30,000+)",
-      "Custom Shopify (₹80,000+)",
-      "Custom React.js + Node.js (₹1,50,000+)",
-      "Next.js (₹1,75,000+)",
-      "3D Custom Website (₹1,00,000 - ₹4,00,000)"
-    ]
+    key: "timeline",
+    patterns: ["timeline", "deadline", "when"],
+    templates: ["When do you want the first version ready?"],
+    suggestions: ["4–6 weeks", "8–14 weeks", "Flexible"],
   },
-  {
-    "key": "timeline",
-    "patterns": [
-      "timeline",
-      "deadline",
-      "when",
-      "launch"
-    ],
-    "templates": [
-      "When do you need the website ready? ⏰"
-    ],
-    "suggestions": [
-      "1-2 weeks",
-      "1 month",
-      "2-3 months",
-      "Flexible"
-    ]
-  }
 ];
 
-const chatbot = { service, openingMessage, questions };
+const chatbot = { service, openingMessage, questions, serviceDetails };
 export default chatbot;

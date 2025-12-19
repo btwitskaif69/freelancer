@@ -1,5 +1,10 @@
 export const service = "Writing & Content";
 export const openingMessage = "Hey! ✍️ Ready to create amazing content? Let's talk about what you need!";
+export const serviceDetails = `Sub-types: Website Content, Blogs & Articles, Ad Copy, Scripts
+Deliverables: SEO-optimized content, proofreading, plagiarism-free writing
+Pricing: Blogs ₹1–₹5/word | Website content ₹10,000–₹50,000
+Timelines: Full content package 2–4 weeks | Partial scope: Single blog 3–5 days (₹1–₹5/word), Landing page copy 5–7 days (₹5,000–₹15,000)
+Timeline policy: timelines are in working days; 10–20% buffer included; delays due to missing client inputs pause the timeline.`;
 export const questions = [
   {
     "key": "name",
@@ -117,5 +122,5 @@ export const questions = [
   }
 ];
 
-const chatbot = { service, openingMessage, questions };
+const chatbot = { service, openingMessage, questions, serviceDetails };
 export default chatbot;

@@ -1,5 +1,10 @@
 export const service = "Video Services";
 export const openingMessage = "Hey! 🎬 I'm here to help you create an amazing video. Let's figure out exactly what you need!";
+export const serviceDetails = `Sub-types: Reels/Shorts, Explainer Videos, Ad Films, Corporate Videos
+Deliverables: Script & storyboard, editing & motion graphics, multiple export formats
+Pricing: Reels ₹1,500–₹5,000/video | Explainer ₹10,000–₹40,000 | Ad video ₹5,000–₹25,000
+Timelines: Full video project 7–14 days | Partial scope: Editing only 3–5 days (₹1,000–₹8,000), Script only 2–3 days (₹2,000–₹6,000)
+Timeline policy: timelines include buffer days (10–20%); delays due to missing client inputs pause the timeline.`;
 export const questions = [
   {
     "key": "name",
@@ -181,5 +186,5 @@ export const questions = [
   }
 ];
 
-const chatbot = { service, openingMessage, questions };
+const chatbot = { service, openingMessage, questions, serviceDetails };
 export default chatbot;

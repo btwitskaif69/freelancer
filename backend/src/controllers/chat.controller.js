@@ -25,6 +25,7 @@ import {
   generateProposalFromState,
   generateRoadmapFromState,
 } from "../lib/conversation-state.js";
+import { getChatbot } from "../lib/chatbots/index.js";
 
 
 const MIN_WEBSITE_PRICE = 10000;
@@ -207,6 +208,10 @@ const toHistoryMessage = (message) => ({
 });
 
 const getServiceDetails = (service) => {
+  const chatbot = getChatbot(service);
+  const chatbotDetails = (chatbot?.serviceDetails || chatbot?.details || "").toString().trim();
+  if (chatbotDetails) return chatbotDetails;
+
   const services = {
     "Development & Tech":
       "Websites, mobile apps, SaaS platforms, and e-commerce solutions.",

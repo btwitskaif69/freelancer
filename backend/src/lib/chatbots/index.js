@@ -11,6 +11,10 @@ import creativeAndDesignChatbot from "./services/creative-and-design.chatbot.js"
 import writingAndContentChatbot from "./services/writing-and-content.chatbot.js";
 import customerSupportChatbot from "./services/customer-support.chatbot.js";
 import audioServicesChatbot from "./services/audio-services.chatbot.js";
+import influencerUgcMarketingChatbot from "./services/influencer-ugc-marketing.chatbot.js";
+import crmAndErpSolutionsChatbot from "./services/crm-and-erp-solutions.chatbot.js";
+import aiAutomationChatbot from "./services/ai-automation.chatbot.js";
+import whatsappChatBotChatbot from "./services/whatsapp-chat-bot.chatbot.js";
 
 export const CHATBOTS_BY_SERVICE = Object.freeze({
   [defaultChatbot.service]: defaultChatbot,
@@ -26,6 +30,10 @@ export const CHATBOTS_BY_SERVICE = Object.freeze({
   [writingAndContentChatbot.service]: writingAndContentChatbot,
   [customerSupportChatbot.service]: customerSupportChatbot,
   [audioServicesChatbot.service]: audioServicesChatbot,
+  [influencerUgcMarketingChatbot.service]: influencerUgcMarketingChatbot,
+  [crmAndErpSolutionsChatbot.service]: crmAndErpSolutionsChatbot,
+  [aiAutomationChatbot.service]: aiAutomationChatbot,
+  [whatsappChatBotChatbot.service]: whatsappChatBotChatbot,
 });
 
 export const getChatbot = (service) => {
@@ -39,4 +47,3 @@ export const getChatbot = (service) => {
 export const getChatbotQuestions = (service) => getChatbot(service).questions;
 export const getChatbotOpeningMessage = (service) =>
   getChatbot(service).openingMessage;
-

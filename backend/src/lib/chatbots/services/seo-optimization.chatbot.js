@@ -1,5 +1,10 @@
 export const service = "SEO Optimization";
 export const openingMessage = "Hi! 🔍 Ready to rank higher on Google? Let's boost your visibility!";
+export const serviceDetails = `Sub-types: On-page SEO, Off-page SEO, Technical SEO, Local SEO (GMB)
+Deliverables: Keyword research, on-page optimization, backlink building, monthly SEO report
+Pricing: Starter ₹15,000/month | Growth ₹25,000–₹60,000/month
+Timelines: Results typically start in 60–90 days | Partial scope: Audit only 7–10 days (₹8,000–₹20,000), On-page SEO only 15–20 days (₹15,000–₹30,000)
+Timeline policy: timelines are in working days; 10–20% buffer included; delays due to missing client inputs pause the timeline.`;
 export const questions = [
   {
     "key": "name",
@@ -103,5 +108,5 @@ export const questions = [
   }
 ];
 
-const chatbot = { service, openingMessage, questions };
+const chatbot = { service, openingMessage, questions, serviceDetails };
 export default chatbot;

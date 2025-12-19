@@ -1,5 +1,10 @@
 export const service = "App Development";
 export const openingMessage = "Hey! 📱 Ready to build your app? Let's figure out exactly what you need!";
+export const serviceDetails = `Sub-types: Android App, iOS App, Cross-platform (Flutter / React Native), App Maintenance
+Deliverables: UI screens & user flow, frontend + backend development, API integration, testing & deployment, App Store / Play Store submission
+Pricing: MVP App ₹2,00,000–₹4,00,000 | Advanced App ₹5,00,000–₹12,00,000 | Maintenance ₹15,000–₹40,000/month
+Timelines: Full project 8–14 weeks (buffer included) | Partial scope: UI Design 2–3 weeks (₹40,000–₹1,00,000), Backend 4–6 weeks (₹1,00,000–₹3,00,000), Feature enhancement 1–3 weeks (₹30,000–₹1,50,000)
+Timeline policy: timelines are in working days; 10–20% buffer included; delays due to missing client inputs pause the timeline.`;
 export const questions = [
   {
     "key": "name",
@@ -241,5 +246,5 @@ export const questions = [
   }
 ];
 
-const chatbot = { service, openingMessage, questions };
+const chatbot = { service, openingMessage, questions, serviceDetails };
 export default chatbot;

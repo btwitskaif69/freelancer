@@ -1,5 +1,10 @@
 export const service = "Performance Marketing";
 export const openingMessage = "Hi! 🎯 Ready to run some high-converting ads? Let's get started!";
+export const serviceDetails = `Sub-types: Meta Ads, Google Ads, LinkedIn Ads, Retargeting
+Deliverables: Campaign strategy, ad creatives & copies, optimization & reports
+Pricing: Setup ₹20,000–₹40,000 | Management 10–20% of ad spend
+Timelines: Ongoing (30-day cycles) | Partial scope: Ad setup only 5–7 days (₹10,000–₹25,000), Optimization only monthly (₹15,000–₹30,000)
+Timeline policy: timelines are in working days; 10–20% buffer included; delays due to missing client inputs pause the timeline.`;
 export const questions = [
   {
     "key": "name",
@@ -99,5 +104,5 @@ export const questions = [
   }
 ];
 
-const chatbot = { service, openingMessage, questions };
+const chatbot = { service, openingMessage, questions, serviceDetails };
 export default chatbot;

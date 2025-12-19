@@ -1,5 +1,10 @@
 export const service = "Social Media Management";
 export const openingMessage = "Hey! 📱 Let's grow your social presence! Tell me about your goals.";
+export const serviceDetails = `Sub-types: Instagram, LinkedIn, Facebook, YouTube
+Deliverables: Content calendar, creatives & captions, posting & engagement, monthly analytics
+Pricing: Basic ₹15,000/month | Standard ₹25,000–₹40,000/month | Premium ₹50,000+/month
+Timelines: Monthly engagement | Partial scope: Content creation only 10–15 days (₹10,000–₹25,000), Posting only monthly (₹5,000–₹15,000)
+Timeline policy: timelines are in working days; 10–20% buffer included; delays due to missing client inputs pause the timeline.`;
 export const questions = [
   {
     "key": "name",
@@ -113,5 +118,5 @@ export const questions = [
   }
 ];
 
-const chatbot = { service, openingMessage, questions };
+const chatbot = { service, openingMessage, questions, serviceDetails };
 export default chatbot;

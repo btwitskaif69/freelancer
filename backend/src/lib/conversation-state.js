@@ -326,7 +326,12 @@ const extractDescriptionFromMixedMessage = (value = "") => {
     // If we didn't find a project/brand marker, strip common lead-ins like "my name ..."
     if (startIndex === 0) {
         candidate = candidate
-            .replace(/\b(?:my\s+name|name)\s*(?:is|:)?\s+[a-z0-9][a-z0-9' -]{0,80}\b/gi, "")
+            .replace(/^(?:hi|hello|hey)\b[!,.\s-]*/i, "")
+            .replace(
+                /^(?:my\s+name|name)\s*(?:is|:)?\s+(?!and\b|i\b|im\b|i'm\b|we\b|we're\b)[a-z][a-z'’.-]*(?:\s+(?!and\b|i\b|im\b|i'm\b|we\b|we're\b)[a-z][a-z'’.-]*){0,2}\b[!,.\s-]*/i,
+                ""
+            )
+            .replace(/^\s*(?:and|so)\b\s*/i, "")
             .replace(
                 /\b(?:my\s+)?(?:company|business|brand|project)\s*(?:name\s*)?(?:is|:|called|named)\s+[^\n,.;]{1,80}?(?=(?:\s+(?:and|with|\bbudget\b|\btech\b|\btimeline\b))|[,.!\n]|$)/gi,
                 ""
@@ -747,10 +752,11 @@ const inferPagesFromBrief = (pagesQuestion, rawText = "", websiteTypeHint = "") 
     }
 
     const hasAdminPanel =
-        /\badmin\s*(?:panel|dashboard|portal|console)\b/i.test(lower) ||
-        /\bmanage\s+(?:products?|orders?|users?|inventory|catalog)\b/i.test(lower) ||
-        /\b(?:product|order|user)\s+management\b/i.test(lower) ||
-        /\bcoupons?\b|\bdiscount\s+coupons?\b/i.test(lower);
+        /\badmin\s*(?:panel|dashboard|portal|console|section|area)\b/i.test(lower) ||
+        /\bmanage\s+(?:products?|orders?|users?|inventory|stock|catalog|prices?|pricing)\b/i.test(lower) ||
+        /\b(?:product|order|user|inventory|stock|catalog)\s+management\b/i.test(lower) ||
+        /\b(?:update|edit)\s+(?:prices?|pricing|stock|inventory)\b/i.test(lower) ||
+        /\b(?:coupons?|discounts?|promo\s*codes?)\b/i.test(lower);
 
     if (hasAdminPanel) add("Admin Dashboard");
 
@@ -1032,6 +1038,23 @@ const looksLikeProjectBrief = (value = "") => {
     }
 
     if (/\b(features?|requirements?|must-?have|include|pages?)\b/i.test(lower)) {
+        signals += 1;
+    }
+
+    // Long, multi-sentence messages that clearly talk about a website/app are usually a one-shot brief
+    // even if the user doesn't explicitly say "features/requirements".
+    if (
+        /\b(website|web\s*app|app|platform|store|shop|marketplace|landing\s*page|portfolio|saas|e-?\s*commerce|ecommerce)\b/i.test(
+            lower
+        )
+    ) {
+        signals += 1;
+    }
+
+    if (
+        /\b(?:users?|customers?|visitors?|people|clients?)\b/i.test(lower) &&
+        /\b(?:can|should|able\s+to|must|need\s+to)\b/i.test(lower)
+    ) {
         signals += 1;
     }
 
@@ -1414,12 +1437,25 @@ const extractKnownFieldsFromMessage = (questions = [], message = "", collectedDa
         const already =
             normalizeText(collectedData.website_type) || normalizeText(updates.website_type);
         if (!already) {
-            const lower = parsingText.toLowerCase();
+            const lower = normalizeForSuggestionMatching(parsingText).toLowerCase();
+
+            let score = 0;
+            if (/\b(e-?\s*commerce|ecommerce)\b/i.test(lower)) score += 4;
+            if (/\bmarketplace\b/i.test(lower)) score += 3;
+            if (/\bonline\b[\s\S]{0,40}\b(?:store|shop|boutique)\b/i.test(lower)) score += 3;
+            if (/\b(?:store|shop|boutique)\b/i.test(lower)) score += 1;
+            if (/\b(?:sell|selling|buy|purchase|purchases)\b/i.test(lower)) score += 2;
+            if (/\b(?:product|products|catalog(?:ue)?|collection|collections)\b/i.test(lower)) score += 1;
+            if (/\b(?:cart|checkout)\b/i.test(lower)) score += 2;
+            if (/\b(?:payments?|payment|pay\b|razorpay|stripe)\b/i.test(lower)) score += 2;
+            if (/\b(?:order|orders)\b/i.test(lower)) score += 1;
+            if (/\b(?:tracking|track)\b/i.test(lower)) score += 1;
+            if (/\b(?:inventory|stock|sku|discount|coupon|wishlist)\b/i.test(lower)) score += 1;
+
             const looksEcom =
-                /\b(e-?\s*commerce|ecommerce)\b/i.test(lower) ||
-                /\bonline\s+(?:store|shop)\b/i.test(lower) ||
-                /\bshopping\s+website\b/i.test(lower) ||
-                (/\bcart\b/i.test(lower) && /\bcheckout\b|\bpayments?\b/i.test(lower));
+                score >= 3 ||
+                (/\b(?:cart|checkout)\b/i.test(lower) &&
+                    /\b(?:products?|shop|store|boutique)\b/i.test(lower));
 
             if (looksEcom) updates.website_type = "E-commerce";
         }

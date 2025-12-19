@@ -1,5 +1,10 @@
 export const service = "Customer Support";
 export const openingMessage = "Hi! 🎧 Let's set up great customer support. Tell me about your needs!";
+export const serviceDetails = `Sub-types: Email Support, Chat Support, Voice Support
+Deliverables: Trained agents, SLA handling, daily/weekly reports
+Pricing: Email/Chat ₹25,000–₹60,000 per agent | Voice ₹40,000–₹80,000 per agent
+Timelines: Monthly engagement | Partial scope: Email only monthly (₹20,000–₹40,000), Chat only monthly (₹25,000–₹50,000)
+Timeline policy: timelines are in working days; 10–20% buffer included; delays due to missing client inputs pause the timeline.`;
 export const questions = [
   {
     "key": "name",
@@ -115,5 +120,5 @@ export const questions = [
   }
 ];
 
-const chatbot = { service, openingMessage, questions };
+const chatbot = { service, openingMessage, questions, serviceDetails };
 export default chatbot;

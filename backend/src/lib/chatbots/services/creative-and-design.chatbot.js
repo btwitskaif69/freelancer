@@ -1,5 +1,10 @@
 export const service = "Creative & Design";
 export const openingMessage = "Hey! 🎨 Let's create something beautiful together. Tell me about your design needs!";
+export const serviceDetails = `Sub-types: Logo Design, Branding Kit, UI/UX Design, Marketing Creatives
+Deliverables: Design concepts, revisions, final source files
+Pricing: Logo ₹8,000–₹30,000 | Branding kit ₹40,000–₹1,50,000 | UI/UX ₹1,500–₹3,000/screen
+Timelines: Full branding project 3–5 weeks | Partial scope: Logo only 7–10 days (₹8,000–₹30,000), Single creative set 3–5 days (₹3,000–₹10,000)
+Timeline policy: timelines are in working days; 10–20% buffer included; delays due to missing client inputs pause the timeline.`;
 export const questions = [
   {
     "key": "name",
@@ -118,5 +123,5 @@ export const questions = [
   }
 ];
 
-const chatbot = { service, openingMessage, questions };
+const chatbot = { service, openingMessage, questions, serviceDetails };
 export default chatbot;

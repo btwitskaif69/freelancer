@@ -56,14 +56,19 @@ export const questions = [
       "want"
     ],
     "templates": [
-      "What's your main goal with social media?"
+      "What are your main goals with social media? (Select all that apply)"
     ],
     "suggestions": [
-      "More followers",
-      "Engagement",
+      "Grow followers",
+      "Increase engagement",
       "Brand awareness",
-      "Sales/Leads"
-    ]
+      "Leads/Sales",
+      "Drive website traffic",
+      "Build personal brand",
+      "Customer support"
+    ],
+    "multiSelect": true,
+    "maxSelect": 3
   },
   {
     "key": "content",

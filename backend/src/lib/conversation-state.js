@@ -30,6 +30,12 @@ const canonicalize = (value = "") =>
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "");
 
+const canonicalizeForI18n = (value = "") =>
+    normalizeText(value)
+        .normalize("NFKC")
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, "");
+
 const normalizeForSuggestionMatching = (value = "") => {
     const text = normalizeText(value).toLowerCase();
     if (!text) return "";
@@ -985,7 +991,7 @@ const isBareBudgetAnswer = (value = "") => {
 
 const isBareTimelineAnswer = (value = "") => {
     const text = normalizeText(value)
-        .replace(/\?/g, "")
+        .replace(/[?？؟]/g, "")
         .toLowerCase();
     if (!text) return false;
     if (text === "flexible") return true;
@@ -997,14 +1003,15 @@ const isBareTimelineAnswer = (value = "") => {
 const isUserQuestion = (value = "") => {
     const text = normalizeText(value);
     if (!text) return false;
-    // Treat as a question only when "?" acts like punctuation (not inside words like "I?m" or "?95,000").
-    if (/\?(?![a-z0-9])/i.test(text)) {
-        const withoutMarks = text.replace(/\?(?![a-z0-9])/gi, "");
-        // Treat pure budget/timeline inputs as answers even if a user typed '?'. Otherwise it's a question.
-        if (isBareBudgetAnswer(withoutMarks) || isBareTimelineAnswer(withoutMarks)) return false;
-        return true;
-    }
-    return /^(can|could|would|should|do|does|is|are|will|may|what|why|how|when|where|which)\b/i.test(text);
+    // Treat as a question only when question-mark punctuation is present (not inside words like "I?m" or "?95,000").
+    // This intentionally does NOT infer questions from leading words (e.g. "can you ...") unless the user
+    // includes a question mark, so the chatbot doesn't break the questionnaire flow on statement-like inputs.
+    if (!/[?？؟](?![\p{L}\p{N}])/u.test(text)) return false;
+
+    const withoutMarks = text.replace(/[?？؟](?![\p{L}\p{N}])/gu, "");
+    // Treat pure budget/timeline inputs as answers even if a user typed '?'. Otherwise it's a question.
+    if (isBareBudgetAnswer(withoutMarks) || isBareTimelineAnswer(withoutMarks)) return false;
+    return true;
 };
 
 const looksLikeProjectBrief = (value = "") => {
@@ -1514,9 +1521,49 @@ const extractKnownFieldsFromMessage = (questions = [], message = "", collectedDa
             })
             : false;
 
+        const hasDeploymentContext =
+            key === "deployment"
+                ? /\b(deploy|deployment|host(?:ed|ing)?|hosting)\b/i.test(parsingText)
+                : false;
+        const effectiveHasKeyPatterns =
+            key === "deployment" ? hasKeyPatterns || hasDeploymentContext : hasKeyPatterns;
+
+        const singleMatchCanon =
+            matches.length === 1 ? canonicalize(String(matches[0] || "").toLowerCase()) : null;
+        const isLowSignalSingleMatch =
+            Boolean(singleMatchCanon) &&
+            (singleMatchCanon === "notsureyet" || singleMatchCanon === "nopreference");
+
+        // Prevent generic answers like "Not sure" from accidentally populating unrelated fields
+        // when the user sends a long brief (e.g. "not sure about design" should not auto-fill deployment).
+        if (!isShort && isLowSignalSingleMatch) {
+            if (key === "deployment") {
+                if (!hasDeploymentContext) continue;
+            } else if (!effectiveHasKeyPatterns) {
+                continue;
+            }
+        }
+
+        // Deployment providers can overlap with generic words (e.g. "render") inside long briefs.
+        // Only infer deployment out-of-sequence when the user explicitly talks about hosting/deployment
+        // (or they list multiple providers).
+        if (
+            key === "deployment" &&
+            !isShort &&
+            !effectiveHasKeyPatterns &&
+            !(question.multiSelect && matches.length >= 2)
+        ) {
+            continue;
+        }
+
         // Only accept out-of-sequence suggestion inference when the message looks like a direct selection.
         // This avoids accidental matches in long, descriptive messages.
-        if (!isShort && !hasListSeparators && !hasKeyPatterns && !(question.multiSelect && matches.length >= 2)) {
+        if (
+            !isShort &&
+            !hasListSeparators &&
+            !effectiveHasKeyPatterns &&
+            !(question.multiSelect && matches.length >= 2)
+        ) {
             continue;
         }
 
@@ -1726,8 +1773,34 @@ export function buildConversationState(history, service) {
 export function processUserAnswer(state, message) {
     const questions = Array.isArray(state?.questions) ? state.questions : [];
     const collectedData = { ...(state?.collectedData || {}) };
-    const normalized = normalizeText(message);
-    const wasQuestion = isUserQuestion(normalized);
+    const rawMessage = normalizeText(message);
+    const normalized = (() => {
+        const i18n = state?.i18n;
+        const lastOptions = i18n?.lastOptions;
+        if (!lastOptions?.questionKey || !lastOptions?.map) return rawMessage;
+
+        const activeStep = Number.isInteger(state?.currentStep)
+            ? state.currentStep
+            : getCurrentStepFromCollected(questions, collectedData);
+        const activeKey = questions[activeStep]?.key || null;
+        if (!activeKey || activeKey !== lastOptions.questionKey) return rawMessage;
+
+        const map = lastOptions.map;
+        if (!map || typeof map !== "object") return rawMessage;
+
+        const parts = splitSelections(rawMessage);
+        if (parts.length <= 1) {
+            const canon = canonicalizeForI18n(rawMessage);
+            return canon && map[canon] ? map[canon] : rawMessage;
+        }
+
+        const mapped = parts.map((part) => {
+            const canon = canonicalizeForI18n(part);
+            return canon && map[canon] ? map[canon] : part;
+        });
+        return mapped.join(", ");
+    })();
+    const wasQuestion = isUserQuestion(rawMessage);
 
     const activeStep = Number.isInteger(state?.currentStep)
         ? state.currentStep

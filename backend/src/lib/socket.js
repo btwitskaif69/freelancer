@@ -1,7 +1,7 @@
 import { Server } from "socket.io";
 import { env } from "../config/env.js";
 import { prisma } from "./prisma.js";
-import { generateChatReply } from "../controllers/chat.controller.js";
+import { generateChatReplyWithState } from "../controllers/chat.controller.js";
 import {
   ensureConversation,
   createConversation as createInMemoryConversation,
@@ -288,11 +288,14 @@ export const initSocket = (server) => {
 
             let assistantReply = null;
             try {
-              assistantReply = await generateChatReply({
+              const { reply, state: nextState } = await generateChatReplyWithState({
                 message: content,
                 service: service || conversation.service || "",
-                history: dbHistory
+                history: dbHistory,
+                state: conversation.assistantState
               });
+              assistantReply = reply;
+              conversation.assistantState = nextState;
             } catch (error) {
               console.error("Assistant generation failed", error);
               socket.emit("chat:error", {

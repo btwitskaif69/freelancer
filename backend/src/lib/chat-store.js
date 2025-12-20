@@ -20,7 +20,8 @@ export const createConversation = ({ service = null, createdById = null } = {}) 
     createdById,
     createdAt: now,
     updatedAt: now,
-    messages: []
+    messages: [],
+    assistantState: null
   };
   conversations.set(id, conversation);
   if (service) {

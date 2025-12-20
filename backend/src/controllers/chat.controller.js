@@ -26,6 +26,12 @@ import {
   generateRoadmapFromState,
 } from "../lib/conversation-state.js";
 import { getChatbot } from "../lib/chatbots/index.js";
+import {
+  detectLocaleFromScript,
+  shouldDetectLocaleFromMessage,
+  detectLocaleWithAI,
+  translateAssistantReply,
+} from "../lib/i18n.js";
 
 
 const MIN_WEBSITE_PRICE = 10000;
@@ -918,11 +924,12 @@ Return ONLY the rewritten description, nothing else.`
   }
 };
 
-export const generateChatReply = async ({
+export const generateChatReplyWithState = async ({
   message,
   service,
   history,
   contextHint = "",
+  state: existingState = null,
 }) => {
   const apiKey = env.OPENROUTER_API_KEY?.trim();
 
@@ -941,6 +948,13 @@ export const generateChatReply = async ({
     },
   });
 
+  // Use an instruction-following model for i18n tasks (language detect/translate).
+  const i18nModel = env.OPENROUTER_MODEL_FALLBACK || env.OPENROUTER_MODEL;
+  const primaryLooksReasoningOnly = String(env.OPENROUTER_MODEL || "").includes("gpt-oss");
+  const i18nDetectFallbackModel = env.OPENROUTER_MODEL;
+  // Avoid falling back to reasoning-only models for translations (they often emit empty `content`).
+  const i18nTranslateFallbackModel = primaryLooksReasoningOnly ? null : env.OPENROUTER_MODEL;
+
   const safeHistory = Array.isArray(history) ? history.slice(-50) : [];
   const normalizedMessage = (message || "").trim();
   const historyForStateMachine = (() => {
@@ -955,8 +969,66 @@ export const generateChatReply = async ({
     return safeHistory;
   })();
 
-  const state = buildConversationState(historyForStateMachine, service);
-  const updatedState = processUserAnswer(state, normalizedMessage);
+  const baseState =
+    existingState && typeof existingState === "object"
+      ? existingState
+      : buildConversationState(historyForStateMachine, service);
+  const updatedState = processUserAnswer(baseState, normalizedMessage);
+
+  const baseI18n =
+    baseState?.i18n && typeof baseState.i18n === "object" ? baseState.i18n : null;
+  const existingLocale = baseI18n?.locale || null;
+  const localeLockedToStart = baseI18n?.lockedToStart === true;
+
+  // Detect locale ONCE per conversation (first meaningful user message) and keep it stable.
+  // If server-side state is missing (e.g. cold start), infer locale from the earliest user
+  // message in history to avoid switching languages mid-chat.
+  const localeSample = (() => {
+    const firstUser = historyForStateMachine.find(
+      (msg) => msg?.role === "user" && (msg.content || "").trim()
+    );
+    return (firstUser?.content || normalizedMessage || "").trim();
+  })();
+
+  const shouldDetectLocale =
+    !localeLockedToStart &&
+    shouldDetectLocaleFromMessage({
+      message: localeSample,
+      existingLocale: null,
+      isNewConversation: true,
+    });
+
+  let locale = existingLocale || "en";
+  let lockedToStart = localeLockedToStart;
+  if (!localeLockedToStart) {
+    const scriptLocale = detectLocaleFromScript(localeSample);
+    if (scriptLocale) {
+      locale = scriptLocale;
+      lockedToStart = true;
+    } else if (shouldDetectLocale) {
+      try {
+        locale = await detectLocaleWithAI(openai, localeSample, {
+          model: i18nModel,
+          fallbackModel: i18nDetectFallbackModel,
+        });
+        lockedToStart = true;
+      } catch (error) {
+        console.error("Locale detection failed:", error?.message || error);
+        lockedToStart = Boolean(locale);
+      }
+    }
+  }
+
+  const stateWithLocale = {
+    ...updatedState,
+    i18n: {
+      ...(updatedState?.i18n && typeof updatedState.i18n === "object"
+        ? updatedState.i18n
+        : {}),
+      locale,
+      lockedToStart,
+    },
+  };
 
   const isRoadmapOrEstimateRequest = (value = "") => {
     const text = (value || "").toString().toLowerCase();
@@ -982,7 +1054,7 @@ export const generateChatReply = async ({
   };
 
   const answerServiceQuestionWithAI = async () => {
-    const known = Object.entries(updatedState.collectedData || {})
+    const known = Object.entries(stateWithLocale.collectedData || {})
       .filter(([, v]) => v && v !== "[skipped]")
       .slice(0, 12)
       .map(([k, v]) => `${k}: ${String(v).slice(0, 160)}`)
@@ -1045,10 +1117,12 @@ export const generateChatReply = async ({
   };
 
   let aiAnswer = "";
-  const wantsRoadmap = isRoadmapOrEstimateRequest(normalizedMessage);
+  const wantsRoadmap =
+    Boolean(stateWithLocale?.meta?.wasQuestion) &&
+    isRoadmapOrEstimateRequest(normalizedMessage);
   if (wantsRoadmap) {
-    aiAnswer = generateRoadmapFromState(updatedState);
-  } else if (updatedState?.meta?.wasQuestion) {
+    aiAnswer = generateRoadmapFromState(stateWithLocale);
+  } else if (stateWithLocale?.meta?.wasQuestion) {
     try {
       aiAnswer = await answerServiceQuestionWithAI();
     } catch (error) {
@@ -1057,18 +1131,57 @@ export const generateChatReply = async ({
     }
   }
 
-  if (shouldGenerateProposal(updatedState)) {
-    const rawProposal = generateProposalFromState(updatedState);
+  let baseReply = "";
+  if (shouldGenerateProposal(stateWithLocale)) {
+    const rawProposal = generateProposalFromState(stateWithLocale);
     const rewritten = await rewriteProposalWithAI(rawProposal, apiKey);
-    return aiAnswer ? `${aiAnswer}\n\n${rewritten}` : rewritten;
+    baseReply = aiAnswer ? `${aiAnswer}\n\n${rewritten}` : rewritten;
+  } else {
+    const nextQuestion = getNextHumanizedQuestion(stateWithLocale);
+    baseReply = nextQuestion
+      ? aiAnswer
+        ? `${aiAnswer}\n\n${nextQuestion}`
+        : nextQuestion
+      : aiAnswer || "Could you share a bit more detail?";
   }
 
-  const nextQuestion = getNextHumanizedQuestion(updatedState);
-  if (!nextQuestion) {
-    return aiAnswer || "Could you share a bit more detail?";
+  let reply = baseReply;
+  let lastOptions = null;
+  if (locale && locale !== "en") {
+    try {
+      const translated = await translateAssistantReply(openai, baseReply, {
+        targetLocale: locale,
+        model: i18nModel,
+        fallbackModel: i18nTranslateFallbackModel,
+      });
+      reply = translated.reply || baseReply;
+      lastOptions =
+        translated.lastOptions?.map &&
+        Object.keys(translated.lastOptions.map).length
+          ? translated.lastOptions
+          : null;
+    } catch (error) {
+      console.error("Reply translation failed:", error?.message || error);
+    }
   }
 
-  return aiAnswer ? `${aiAnswer}\n\n${nextQuestion}` : nextQuestion;
+  const state = {
+    ...stateWithLocale,
+    i18n: {
+      ...(stateWithLocale?.i18n && typeof stateWithLocale.i18n === "object"
+        ? stateWithLocale.i18n
+        : {}),
+      locale,
+      lastOptions,
+    },
+  };
+
+  return { reply, state };
+};
+
+export const generateChatReply = async (args) => {
+  const { reply } = await generateChatReplyWithState(args);
+  return reply;
 };
 
 export const chatController = async (req, res) => {
@@ -1416,12 +1529,15 @@ export const addConversationMessage = asyncHandler(async (req, res) => {
       const contextHint = summarizeContext(dbHistory);
 
       try {
-        const assistantReply = await generateChatReply({
+        const { reply: assistantReply, state: nextState } = await generateChatReplyWithState({
           message: content,
           service: service || conversation.service || "",
           history: dbHistory,
           contextHint,
+          state: conversation.assistantState
         });
+
+        conversation.assistantState = nextState;
 
         assistantMessage = addMessage({
           conversationId: conversation.id,
